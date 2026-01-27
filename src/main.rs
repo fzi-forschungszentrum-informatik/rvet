@@ -20,6 +20,9 @@ fn main() -> anyhow::Result<()> {
         .unwrap_or_default();
     let builder = packet::builder()
         .with_params(&params)
+        .with_hart_index_width(args.hart_id_width)
+        .with_timestamp_width(args.ts_width)
+        .with_trace_type_width(args.trace_type_width)
         .for_unit(packet::unit::Plug::default());
 
     match args.command {

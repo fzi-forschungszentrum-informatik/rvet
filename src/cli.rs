@@ -2,12 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 //! CLI parsing types and utilities
 
+use std::path::PathBuf;
+
 #[derive(clap::Parser)]
 #[command(version, about)]
 pub struct Cli {
     /// Packet format to assume for the trace
     #[arg(value_enum, short, long, default_value_t, global = true)]
     pub format: PacketFormat,
+
+    /// Encoder parameters
+    #[arg(short, long, global = true)]
+    pub params: Option<PathBuf>,
 
     #[command(subcommand)]
     pub command: Command,

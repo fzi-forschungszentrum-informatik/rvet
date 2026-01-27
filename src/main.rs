@@ -23,7 +23,7 @@ fn main() -> anyhow::Result<()> {
         .with_hart_index_width(args.hart_id_width)
         .with_timestamp_width(args.ts_width)
         .with_trace_type_width(args.trace_type_width)
-        .for_unit(packet::unit::Plug::default());
+        .for_unit(args.unit.into());
 
     match args.command {
         cli::Command::Payloads { filter, trace } => reader::Reader::new(trace.as_ref(), builder)?

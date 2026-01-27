@@ -32,6 +32,10 @@ pub struct Cli {
     #[arg(long, default_value_t, global = true)]
     pub trace_type_width: u8,
 
+    /// Encoder unit to assume
+    #[arg(long, default_value_t, global = true)]
+    pub unit: Unit,
+
     #[command(subcommand)]
     pub command: Command,
 }

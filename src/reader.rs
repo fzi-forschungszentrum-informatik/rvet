@@ -126,6 +126,50 @@ impl<T: PacketHandler> PacketHandler for &mut T {
     }
 }
 
+/// A [`PacketHandler`] filtering for tracing payloads emitted by a single source
+#[derive(Copy, Clone, Debug)]
+pub enum SingleHart {
+    /// Decode RISC-V Encapsulation structures
+    Encap {
+        /// Source to filter for
+        src_id: u16,
+        /// Accepted flow indicator
+        flow: u8,
+    },
+    /// Decode Siemens Messaging Infrastructure (SMI) packets
+    Smi {
+        /// Source to filter for
+        src_id: u64,
+    },
+}
+
+impl PacketHandler for SingleHart {
+    type Output = packet::payload::Payload<
+        <Plug as packet::unit::Unit>::IOptions,
+        <Plug as packet::unit::Unit>::DOptions,
+    >;
+
+    fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
+        let res = match *self {
+            Self::Encap { src_id, flow } => decoder
+                .decode_encap_packet()?
+                .into_normal()
+                .filter(|p| p.src_id() == src_id && p.flow() == flow)
+                .map(|p| p.decode_payload())
+                .transpose(),
+            Self::Smi { src_id } => {
+                let packet = decoder.decode_smi_packet()?;
+                if packet.hart() == src_id && packet.trace_type().is_some() {
+                    packet.decode_payload().map(Some)
+                } else {
+                    Ok(None)
+                }
+            }
+        };
+        res.context("Could not decode payload")
+    }
+}
+
 /// A dummy [`PacketHandler`]
 #[derive(Copy, Clone, Default, Debug)]
 pub struct DefaultHandler;

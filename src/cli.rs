@@ -4,6 +4,8 @@
 
 use std::path::PathBuf;
 
+use crate::reader::SingleHart;
+
 #[derive(clap::Parser)]
 #[command(version, about)]
 pub struct Cli {

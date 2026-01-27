@@ -170,6 +170,45 @@ impl PacketHandler for SingleHart {
     }
 }
 
+impl clap::Args for SingleHart {
+    fn augment_args(cmd: clap::Command) -> clap::Command {
+        Self::augment_args_for_update(cmd)
+    }
+
+    fn augment_args_for_update(cmd: clap::Command) -> clap::Command {
+        cmd.arg(clap::arg!(--"src-id" <ID> "Process packets originating from this source"))
+            .arg(clap::arg!(--"flow" <ID> "Process packets with this flow indicator"))
+    }
+}
+
+impl clap::FromArgMatches for SingleHart {
+    fn from_arg_matches(matches: &clap::ArgMatches) -> Result<Self, clap::Error> {
+        use crate::cli::PacketFormat;
+
+        let format = matches.get_one("format").cloned().unwrap_or_default();
+        let mut res = match format {
+            PacketFormat::Encap => Self::Encap { src_id: 0, flow: 0 },
+            PacketFormat::Smi => Self::Smi { src_id: 0 },
+        };
+        res.update_from_arg_matches(matches)?;
+        Ok(res)
+    }
+
+    fn update_from_arg_matches(&mut self, matches: &clap::ArgMatches) -> Result<(), clap::Error> {
+        let src_id_value = matches.get_one("src-id").cloned().unwrap_or_default();
+        match self {
+            Self::Encap { src_id, flow } => {
+                *src_id = src_id_value;
+                if let Some(f) = matches.get_one("flow") {
+                    *flow = *f;
+                }
+            }
+            Self::Smi { src_id } => *src_id = src_id_value.into(),
+        }
+        Ok(())
+    }
+}
+
 /// A dummy [`PacketHandler`]
 #[derive(Copy, Clone, Default, Debug)]
 pub struct DefaultHandler;

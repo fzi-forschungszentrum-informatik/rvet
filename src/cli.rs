@@ -22,7 +22,16 @@ pub struct Cli {
 }
 
 #[derive(clap::Subcommand)]
-pub enum Command {}
+pub enum Command {
+    /// Dump the payloads emitted by a single source
+    Payloads {
+        #[command(flatten)]
+        filter: SingleHart,
+
+        #[arg()]
+        trace: PathBuf,
+    },
+}
 
 /// Packet format
 #[derive(Copy, Clone, Default, Debug, PartialEq, Eq, clap::ValueEnum)]

@@ -22,5 +22,12 @@ fn main() -> anyhow::Result<()> {
         .with_params(&params)
         .for_unit(packet::unit::Plug::default());
 
-    match args.command {}
+    match args.command {
+        cli::Command::Payloads { filter, trace } => reader::Reader::new(trace.as_ref(), builder)?
+            .with_handler(filter)
+            .try_for_each(|p| {
+                println!("{:?}", p?);
+                Ok(())
+            }),
+    }
 }

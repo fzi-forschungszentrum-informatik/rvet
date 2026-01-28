@@ -18,7 +18,7 @@ fn main() -> anyhow::Result<()> {
         })
         .transpose()?
         .unwrap_or_default();
-    let builder = packet::builder()
+    let decoder = packet::builder()
         .with_params(&params)
         .with_hart_index_width(args.hart_id_width)
         .with_timestamp_width(args.ts_width)
@@ -26,7 +26,7 @@ fn main() -> anyhow::Result<()> {
         .for_unit(args.unit.into());
 
     match args.command {
-        cli::Command::Payloads { filter, trace } => reader::Reader::new(trace.as_ref(), builder)?
+        cli::Command::Payloads { filter, trace } => reader::Reader::new(trace.as_ref(), decoder)?
             .with_handler(filter)
             .try_for_each(|p| {
                 println!("{:?}", p?);

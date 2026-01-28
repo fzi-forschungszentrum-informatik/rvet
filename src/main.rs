@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Context;
-use riscv_etrace::packet;
+use riscv_etrace::{packet, tracer};
 
 mod binary;
 mod cli;
@@ -42,6 +42,7 @@ fn main() -> anyhow::Result<()> {
         .with_timestamp_width(args.ts_width)
         .with_trace_type_width(args.trace_type_width)
         .for_unit(args.unit.into());
+    let tracer = tracer::builder().with_params(&params);
 
     match args.command {
         cli::Command::Payloads { filter, trace } => {
@@ -49,6 +50,41 @@ fn main() -> anyhow::Result<()> {
             reader::Reader::new(trace.as_ref(), decoder)?
                 .with_handler(filter)
                 .try_for_each(|p| writeln!(out, "{}", p?).map_err(Into::into))
+        }
+        cli::Command::Trace {
+            filter,
+            trace,
+            program,
+        } => {
+            let mut reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(filter);
+            let mut tracer = tracer
+                .with_binary(program.build(target)?)
+                .build::<riscv_etrace::types::stack::NoStack, _>()
+                .context("Could not set up tracer")?;
+
+            let mut item_gen = pretty::ItemGen::new(&params);
+            let mut out = std::io::stdout().lock();
+            reader.try_for_each(|p| {
+                let payload = p?;
+                tracer
+                    .process_payload(&payload)
+                    .context("Could not process payload")?;
+                tracer.by_ref().try_for_each(|i| {
+                    let item = i.context("Error during trace")?;
+                    if let Some(item) = item_gen.process_item(item) {
+                        writeln!(out, "{item}")?;
+                    }
+                    anyhow::Ok(())
+                })?;
+                if let Some(packet::payload::InstructionTrace::Synchronization(
+                    packet::sync::Synchronization::Support(s),
+                )) = payload.as_instruction_trace()
+                    && s.qual_status != packet::sync::QualStatus::NoChange
+                {
+                    writeln!(out, "--- {}", s.qual_status)?;
+                }
+                Ok(())
+            })
         }
     }
 }

@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use riscv_etrace::packet::unit;
 
+use crate::binary;
 use crate::reader::SingleHart;
 
 #[derive(clap::Parser)]
@@ -58,6 +59,18 @@ pub enum Command {
 
         #[arg()]
         trace: PathBuf,
+    },
+    /// Trace a single source
+    Trace {
+        #[command(flatten)]
+        filter: SingleHart,
+
+        /// Trace file
+        trace: PathBuf,
+
+        /// Program binaries to trace
+        #[command(flatten)]
+        program: binary::Args,
     },
 }
 

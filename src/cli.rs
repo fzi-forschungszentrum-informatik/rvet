@@ -36,6 +36,11 @@ pub struct Cli {
     #[arg(long, default_value_t, global = true)]
     pub unit: Unit,
 
+    /// Always display output directly, do not use a pager
+    #[cfg(feature = "pager")]
+    #[arg(long = "no-pager", action = clap::ArgAction::SetFalse, global = true)]
+    pub pager: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }

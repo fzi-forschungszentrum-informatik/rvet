@@ -9,5 +9,6 @@ edition = "2024"
 [dependencies]
 anyhow = "1.0"
 clap = { version = "4.5", features = ["derive"] }
+pager = { version = "0.16", optional = true }
 riscv-etrace = { version = "0.7", features = ["alloc", "serde"] }
 toml = { version = "0.9", features = ["parse"] }

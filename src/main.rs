@@ -10,6 +10,11 @@ mod reader;
 fn main() -> anyhow::Result<()> {
     let args: cli::Cli = clap::Parser::parse();
 
+    #[cfg(feature = "pager")]
+    if args.pager {
+        pager::Pager::new().setup();
+    }
+
     let params = args
         .params
         .map(|path| {

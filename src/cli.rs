@@ -21,15 +21,15 @@ pub struct Cli {
     pub params: Option<PathBuf>,
 
     /// Packet-format specific width for the hart index/src-id field
-    #[arg(long, default_value_t, global = true)]
+    #[arg(long, default_value_t, hide_default_value(true), global = true)]
     pub hart_id_width: u8,
 
     /// Packet-format specific width for the packet's timestamp field
-    #[arg(long, default_value_t, global = true)]
+    #[arg(long, default_value_t, hide_default_value(true), global = true)]
     pub ts_width: u8,
 
     /// Width for the trace type field in SMI packets
-    #[arg(long, default_value_t, global = true)]
+    #[arg(long, default_value_t, hide_default_value(true), global = true)]
     pub trace_type_width: u8,
 
     /// Encoder unit to assume

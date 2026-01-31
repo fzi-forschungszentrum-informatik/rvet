@@ -36,6 +36,10 @@ pub struct Cli {
     #[arg(long, default_value_t, global = true)]
     pub unit: Unit,
 
+    /// Target to assume for raw binaries
+    #[arg(value_enum, short, long, global = true)]
+    pub target: Option<Target>,
+
     /// Always display output directly, do not use a pager
     #[cfg(feature = "pager")]
     #[arg(long = "no-pager", action = clap::ArgAction::SetFalse, global = true)]
@@ -107,5 +111,24 @@ impl clap::ValueEnum for Unit {
 
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         Some(clap::builder::PossibleValue::new(self.name))
+    }
+}
+
+/// Target specification
+#[derive(Copy, Clone, Debug, PartialEq, Eq, clap::ValueEnum)]
+#[value(rename_all = "lower")]
+pub enum Target {
+    Rv32I,
+    Rv64I,
+}
+
+impl From<Target> for riscv_isa::Target {
+    fn from(target: Target) -> Self {
+        use riscv_etrace::instruction::info::MakeDecode;
+
+        match target {
+            Target::Rv32I => Self::rv32i_full(),
+            Target::Rv64I => Self::rv64i_full(),
+        }
     }
 }

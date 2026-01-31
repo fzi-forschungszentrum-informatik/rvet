@@ -9,6 +9,93 @@ use riscv_isa::Target;
 /// Type of binary produced by the builder
 pub type Binary = binary::boxed::Binary<'static, riscv_isa::Instruction>;
 
+/// Specifications of program binaries to load
+#[derive(Clone, Debug)]
+pub struct Specs(Vec<Spec>);
+
+impl clap::Args for Specs {
+    fn augment_args(cmd: clap::Command) -> clap::Command {
+        Self::augment_args_for_update(cmd)
+    }
+
+    fn augment_args_for_update(cmd: clap::Command) -> clap::Command {
+        let arg = clap::Arg::new("code")
+            .long("code")
+            .num_args(1..)
+            .required(true)
+            .action(clap::ArgAction::Append)
+            .value_names(["FILE", "SPEC"])
+            .value_terminator(";")
+            .help("Trace this program")
+            .long_help(
+                "Trace this program
+
+Each FILE is loaded and handled according to (optional) SPECs:
+\"type=<type>\" forces FILE to be handled as <type>. Valid types are
+\"elf\" for ELF files and \"bin\" for raw binaries. If not type is
+specified, it will be discovered from the file contents.
+\"offset=<hex>\" places the object at the given (base) address. This
+option is mandatory for raw binaries and relocatable ELF files.",
+            );
+        cmd.arg(arg)
+    }
+}
+
+impl clap::FromArgMatches for Specs {
+    fn from_arg_matches(matches: &clap::ArgMatches) -> Result<Self, clap::Error> {
+        let mut res = Self(Default::default());
+        res.update_from_arg_matches(matches)?;
+        Ok(res)
+    }
+
+    fn update_from_arg_matches(&mut self, matches: &clap::ArgMatches) -> Result<(), clap::Error> {
+        use clap::error::ErrorKind;
+
+        matches
+            .get_raw_occurrences("code")
+            .ok_or(clap::Error::new(ErrorKind::TooFewValues))?
+            .try_for_each(|mut s| {
+                let path = s
+                    .next()
+                    .ok_or(clap::Error::new(ErrorKind::TooFewValues))?
+                    .into();
+                let mut kind = None;
+                let mut offset = None;
+                s.try_for_each(|p| {
+                    let (key, value) = p
+                        .to_str()
+                        .ok_or_else(|| clap::Error::new(ErrorKind::InvalidUtf8))?
+                        .split_once('=')
+                        .ok_or_else(|| {
+                            clap::Error::raw(ErrorKind::ValueValidation, "Expected key-value pair")
+                        })?;
+                    match key {
+                        "type" => {
+                            let value = value
+                                .parse()
+                                .map_err(|e| clap::Error::raw(ErrorKind::ValueValidation, e))?;
+                            kind = Some(value);
+                        }
+                        "offset" => {
+                            let value = u64::from_str_radix(value, 16)
+                                .map_err(|e| clap::Error::raw(ErrorKind::ValueValidation, e))?;
+                            offset = Some(value);
+                        }
+                        key => {
+                            return Err(clap::Error::raw(
+                                ErrorKind::ValueValidation,
+                                format!("not a valid code option: {key}"),
+                            ));
+                        }
+                    };
+                    Ok(())
+                })?;
+                self.0.push(Spec { path, kind, offset });
+                Ok(())
+            })
+    }
+}
+
 /// Specification of a binary to load
 #[derive(Clone, Debug)]
 struct Spec {

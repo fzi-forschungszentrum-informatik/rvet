@@ -34,7 +34,7 @@ fn main() -> anyhow::Result<()> {
         cli::Command::Payloads { filter, trace } => reader::Reader::new(trace.as_ref(), decoder)?
             .with_handler(filter)
             .try_for_each(|p| {
-                println!("{:?}", p?);
+                println!("{}", p?);
                 Ok(())
             }),
     }

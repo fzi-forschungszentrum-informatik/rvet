@@ -13,6 +13,35 @@ pub type Binary = binary::boxed::Binary<'static, riscv_isa::Instruction>;
 #[derive(Clone, Debug)]
 pub struct Specs(Vec<Spec>);
 
+impl Specs {
+    /// Construct [`Binary`][binary::Binary]s from these specs
+    fn build(self, target: Target) -> anyhow::Result<impl Iterator<Item = anyhow::Result<Binary>>> {
+        /// `elf::ElfBytes`, and therefore `binary::elf::Elf`, depend on the
+        /// underlying data, which is external. We thus need to load the data
+        /// and keep it availible for the `Binary`'s lifetime. And since we need
+        /// to do so for ELFs anyway, we also do so for raw binaries.
+        static DATA: std::sync::OnceLock<Vec<Vec<u8>>> = std::sync::OnceLock::new();
+        let data = self
+            .0
+            .iter()
+            .map(|s| {
+                std::fs::read(&s.path)
+                    .with_context(|| format!("Could not load file '{}'", s.path.display()))
+            })
+            .collect::<anyhow::Result<_>>()?;
+        DATA.set(data)
+            .map_err(|_| anyhow::anyhow!("Could not initialize binary data store"))?;
+
+        let res = Iterator::zip(
+            self.0.into_iter(),
+            DATA.get().context("Could not retrieve loaded data")?.iter(),
+        )
+        .map(move |(s, d)| s.build(target, d.as_ref()));
+
+        Ok(res)
+    }
+}
+
 impl clap::Args for Specs {
     fn augment_args(cmd: clap::Command) -> clap::Command {
         Self::augment_args_for_update(cmd)

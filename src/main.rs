@@ -8,6 +8,8 @@ mod cli;
 mod reader;
 
 fn main() -> anyhow::Result<()> {
+    use std::io::Write;
+
     let args: cli::Cli = clap::Parser::parse();
 
     #[cfg(feature = "pager")]
@@ -31,11 +33,11 @@ fn main() -> anyhow::Result<()> {
         .for_unit(args.unit.into());
 
     match args.command {
-        cli::Command::Payloads { filter, trace } => reader::Reader::new(trace.as_ref(), decoder)?
-            .with_handler(filter)
-            .try_for_each(|p| {
-                println!("{}", p?);
-                Ok(())
-            }),
+        cli::Command::Payloads { filter, trace } => {
+            let mut out = std::io::stdout().lock();
+            reader::Reader::new(trace.as_ref(), decoder)?
+                .with_handler(filter)
+                .try_for_each(|p| writeln!(out, "{}", p?).map_err(Into::into))
+        }
     }
 }

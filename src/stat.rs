@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Utilities for gathering of "statistics"
 
-use riscv_etrace::packet::{encap, smi};
+use anyhow::Context;
+use riscv_etrace::packet::{self, encap, smi};
+
+use crate::reader::PacketHandler;
 
 /// Header fields of a RISC-V encapsulation packet
 #[derive(Copy, Clone, Debug)]
@@ -46,6 +49,24 @@ impl<P> From<encap::Normal<P>> for EncapNormalHeader {
     }
 }
 
+/// [`PacketHandler`] for extracting [`EncapHeader`]s
+#[derive(Copy, Clone, Debug, Default)]
+pub struct EncapHandler;
+
+impl PacketHandler for EncapHandler {
+    type Output = EncapHeader;
+
+    fn handle(
+        &mut self,
+        decoder: &mut packet::decoder::Decoder<'_, packet::unit::Plug>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        decoder
+            .decode_encap_packet()
+            .context("Could not decode packet")
+            .map(|p| Some(p.into()))
+    }
+}
+
 /// Header fields of a SMI packet
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SmiHeader {
@@ -61,5 +82,23 @@ impl<P> From<smi::Packet<P>> for SmiHeader {
             hart: packet.hart(),
             time_tag: packet.time_tag().is_some(),
         }
+    }
+}
+
+/// [`PacketHandler`] for extracting [`EncapHeader`]s
+#[derive(Copy, Clone, Debug, Default)]
+pub struct SmiHandler;
+
+impl PacketHandler for SmiHandler {
+    type Output = SmiHeader;
+
+    fn handle(
+        &mut self,
+        decoder: &mut packet::decoder::Decoder<'_, packet::unit::Plug>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        decoder
+            .decode_smi_packet()
+            .context("Could not decode packet")
+            .map(|p| Some(p.into()))
     }
 }

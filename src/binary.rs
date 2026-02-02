@@ -199,3 +199,35 @@ impl std::str::FromStr for Kind {
         }
     }
 }
+
+/// Supported special ROMs
+#[derive(Copy, Clone, Debug, clap::ValueEnum)]
+pub enum Rom {
+    /// Bootrom of the spike instruction set simulator
+    Spike,
+}
+
+impl Rom {
+    /// Construct the specified [`Binary`][binary::Binary]s
+    fn build(self, target: Target) -> Binary {
+        use riscv_isa::Xlen;
+
+        use binary::Binary;
+
+        match self {
+            Self::Spike => {
+                let code = match target.xlen {
+                    Xlen::Rv32 => {
+                        b"\x97\x02\x00\x00\x93\x85\x02\x02\x73\x25\x40\xf1\x83\xa2\x82\x01\x82\x82"
+                    }
+                    Xlen::Rv64 => {
+                        b"\x97\x02\x00\x00\x93\x85\x02\x02\x73\x25\x40\xf1\x83\xb2\x82\x01\x82\x82"
+                    }
+                };
+                binary::from_segment(code, target)
+                    .with_offset(0x1000)
+                    .boxed()
+            }
+        }
+    }
+}

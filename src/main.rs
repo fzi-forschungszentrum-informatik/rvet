@@ -8,6 +8,7 @@ mod binary;
 mod cli;
 mod pretty;
 mod reader;
+mod stat;
 
 fn main() -> anyhow::Result<()> {
     use std::io::Write;

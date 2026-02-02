@@ -9,6 +9,27 @@ use riscv_isa::Target;
 /// Type of binary produced by the builder
 pub type Binary = binary::boxed::Binary<'static, riscv_isa::Instruction>;
 
+#[derive(Clone, Debug, clap::Args)]
+pub struct Args {
+    #[command(flatten)]
+    specs: Specs,
+
+    /// Include an additional ROM
+    #[clap(long)]
+    rom: Option<Rom>,
+}
+
+impl Args {
+    /// Construct a [`Binary`][binary::Binary] based on these arguments
+    pub fn build(self, target: Target) -> anyhow::Result<binary::Multi<Vec<Binary>, Binary>> {
+        self.rom
+            .map(|r| Ok(r.build(target)))
+            .into_iter()
+            .chain(self.specs.build(target)?)
+            .collect()
+    }
+}
+
 /// Specifications of program binaries to load
 #[derive(Clone, Debug)]
 pub struct Specs(Vec<Spec>);

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Utilities for gathering of "statistics"
 
-use riscv_etrace::packet::encap;
+use riscv_etrace::packet::{encap, smi};
 
 /// Header fields of a RISC-V encapsulation packet
 #[derive(Copy, Clone, Debug)]
@@ -42,6 +42,24 @@ impl<P> From<encap::Normal<P>> for EncapNormalHeader {
             flow: packet.flow(),
             src_id: packet.src_id(),
             timestamp: packet.timestamp().is_some(),
+        }
+    }
+}
+
+/// Header fields of a SMI packet
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SmiHeader {
+    pub trace_type: u8,
+    pub hart: u64,
+    pub time_tag: bool,
+}
+
+impl<P> From<smi::Packet<P>> for SmiHeader {
+    fn from(packet: smi::Packet<P>) -> Self {
+        Self {
+            trace_type: packet.raw_trace_type(),
+            hart: packet.hart(),
+            time_tag: packet.time_tag().is_some(),
         }
     }
 }

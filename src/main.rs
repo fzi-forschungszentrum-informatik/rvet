@@ -4,6 +4,7 @@
 use anyhow::Context;
 use riscv_etrace::packet;
 
+mod binary;
 mod cli;
 mod reader;
 

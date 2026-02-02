@@ -6,6 +6,7 @@ use riscv_etrace::packet;
 
 mod binary;
 mod cli;
+mod pretty;
 mod reader;
 
 fn main() -> anyhow::Result<()> {

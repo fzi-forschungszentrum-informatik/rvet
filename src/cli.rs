@@ -72,6 +72,11 @@ pub enum Command {
         #[command(flatten)]
         program: binary::Args,
     },
+    /// List number of packets for different sources, destinations and types
+    Stat {
+        /// Trace file
+        trace: PathBuf,
+    },
 }
 
 /// Packet format

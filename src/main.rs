@@ -1,13 +1,17 @@
 // Copyright (c) 2026 FZI Forschungszentrum Informatik
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::BTreeMap;
+
 use anyhow::Context;
+use cli_table::{Cell, Table};
 use riscv_etrace::{packet, tracer};
 
 mod binary;
 mod cli;
 mod pretty;
 mod reader;
+mod stat;
 
 fn main() -> anyhow::Result<()> {
     use std::io::Write;
@@ -86,5 +90,69 @@ fn main() -> anyhow::Result<()> {
                 Ok(())
             })
         }
+        cli::Command::Stat { trace } => {
+            let reader = reader::Reader::new(trace.as_ref(), decoder)?;
+            match args.format {
+                cli::PacketFormat::Encap => encap_stat(reader),
+                cli::PacketFormat::Smi => smi_stat(reader),
+            }
+        }
     }
+}
+
+/// Collect and display stats for a trace file containint encap packets
+fn encap_stat(reader: reader::Reader) -> anyhow::Result<()> {
+    let mut normal: BTreeMap<_, u64> = Default::default();
+    let mut null: BTreeMap<_, u64> = Default::default();
+    reader.with_handler(stat::EncapHandler).try_for_each(|h| {
+        match h? {
+            stat::EncapHeader::Null(n) => *null.entry(n).or_default() += 1,
+            stat::EncapHeader::Normal(n) => *normal.entry(n).or_default() += 1,
+        };
+        anyhow::Ok(())
+    })?;
+    if !normal.is_empty() {
+        println!("Normal encapsulation structures:");
+        let table = normal
+            .into_iter()
+            .map(|(h, v)| [h.flow.cell(), h.src_id.cell(), h.timestamp.cell(), v.cell()])
+            .table()
+            .title(["Flow", "SrcId", "Timestamp", "Count"]);
+        cli_table::print_stdout(table)?;
+    }
+    if !null.is_empty() {
+        println!("Null structures:");
+        let table = null
+            .into_iter()
+            .map(|(h, v)| [h.flow.cell(), h.align.cell(), v.cell()])
+            .table()
+            .title(["Flow", "Align", "Count"]);
+        cli_table::print_stdout(table)?;
+    }
+    Ok(())
+}
+
+/// Collect and display stats for a trace file containint SMI packets
+fn smi_stat(reader: reader::Reader) -> anyhow::Result<()> {
+    let mut packets: BTreeMap<_, u64> = Default::default();
+    reader.with_handler(stat::SmiHandler).try_for_each(|h| {
+        *packets.entry(h?).or_default() += 1;
+        anyhow::Ok(())
+    })?;
+    if !packets.is_empty() {
+        let table = packets
+            .into_iter()
+            .map(|(h, v)| {
+                [
+                    h.trace_type.cell(),
+                    h.hart.cell(),
+                    h.time_tag.cell(),
+                    v.cell(),
+                ]
+            })
+            .table()
+            .title(["Trace type", "HART", "Time tag", "Count"]);
+        cli_table::print_stdout(table)?;
+    }
+    Ok(())
 }

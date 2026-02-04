@@ -5,6 +5,6 @@ format defined in the [Efficient Trace for RISC-V][etrace] specification.
 
 ## License
 
-This library is licensed under the [Apache License 2.0](./LICENSE).
+This program is licensed under the [Apache License 2.0](./LICENSE).
 
 [etrace]: <https://github.com/riscv-non-isa/riscv-trace-spec/>

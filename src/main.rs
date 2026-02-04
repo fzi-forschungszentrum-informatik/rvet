@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::BTreeMap;
+use std::num::NonZeroU8;
 
 use anyhow::Context;
 use cli_table::{Cell, Table};
@@ -32,7 +33,15 @@ fn main() -> anyhow::Result<()> {
             toml::from_str(toml_str.as_ref()).context("Could not parse parameters")
         })
         .transpose()?
-        .unwrap_or_default();
+        .unwrap_or_else(|| {
+            let mut res = riscv_etrace::config::Parameters::default();
+            match args.target {
+                Some(cli::Target::Rv32I) => res.iaddress_width_p = NonZeroU8::new(32).unwrap(),
+                Some(cli::Target::Rv64I) => res.iaddress_width_p = NonZeroU8::new(64).unwrap(),
+                None => {}
+            }
+            res
+        });
 
     let target: riscv_isa::Target = args
         .target

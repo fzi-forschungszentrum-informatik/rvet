@@ -18,19 +18,37 @@ pub struct Cli {
     pub format: PacketFormat,
 
     /// Encoder parameters
-    #[arg(short, long, global = true)]
+    #[arg(short, long, global = true, value_name("TOML"))]
     pub params: Option<PathBuf>,
 
     /// Packet-format specific width for the hart index/src-id field
-    #[arg(long, default_value_t, hide_default_value(true), global = true)]
+    #[arg(
+        long,
+        default_value_t,
+        hide_default_value(true),
+        global = true,
+        value_name("NUM")
+    )]
     pub hart_id_width: u8,
 
     /// Packet-format specific width for the packet's timestamp field
-    #[arg(long, default_value_t, hide_default_value(true), global = true)]
+    #[arg(
+        long,
+        default_value_t,
+        hide_default_value(true),
+        global = true,
+        value_name("NUM")
+    )]
     pub ts_width: u8,
 
     /// Width for the trace type field in SMI packets
-    #[arg(long, default_value_t, hide_default_value(true), global = true)]
+    #[arg(
+        long,
+        default_value_t,
+        hide_default_value(true),
+        global = true,
+        value_name("NUM")
+    )]
     pub trace_type_width: u8,
 
     /// Encoder unit to assume

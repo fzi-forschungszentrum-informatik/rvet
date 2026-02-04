@@ -32,6 +32,29 @@ the `--unit` option):
 * the (original) reference encoder implementation
 * the [PULP rv tracer][rv_tracer]
 
+## Parameter files
+
+Encoder parameters need to be provided as a TOML file with parameters (under
+their specification names) at the root. For example:
+
+    cache_size_p=0
+    call_counter_size_p=0
+    context_width_p=32
+    time_width_p=1
+    ecause_width_p=5
+    f0s_width_p=0
+    iaddress_lsb_p=1
+    iaddress_width_p=64
+    nocontext_p=0
+    notime_p=1
+    privilege_width_p=2
+    return_stack_size_p=0
+    sijump_p=0
+
+> [!NOTE]
+> Not all parameters described in the [specification][etrace] are processed.
+> Unknown parameters are ignored.
+
 ## License
 
 This program is licensed under the [Apache License 2.0](./LICENSE).

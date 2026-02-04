@@ -11,6 +11,11 @@ currently provides subcommands for:
 When built with the `pager` feature, output is displayed via the pager provided
 via the `PAGER` environment variable.
 
+> [!NOTE]
+> The disassembler used in the `trace` subcommand is known to be incomplete and
+> faulty for some instructions. Furthermore, we currently display compressed
+> instructions as their expanded (uncompressed) equivalent.
+
 ## Supported formats
 
 Traces are generally read from a trace file containing packets. The tool

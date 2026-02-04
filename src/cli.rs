@@ -57,7 +57,7 @@ pub enum Command {
         #[command(flatten)]
         filter: SingleHart,
 
-        #[arg()]
+        /// Trace file
         trace: PathBuf,
     },
     /// Trace a single source

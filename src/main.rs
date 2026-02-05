@@ -57,7 +57,7 @@ fn main() -> anyhow::Result<()> {
         .for_unit(args.unit.into());
     let tracer = tracer::builder().with_params(&params);
 
-    match args.command {
+    let res = match args.command {
         cli::Command::Payloads { filter, trace } => {
             let mut out = std::io::stdout().lock();
             reader::Reader::new(trace.as_ref(), decoder)?
@@ -106,7 +106,24 @@ fn main() -> anyhow::Result<()> {
                 cli::PacketFormat::Smi => smi_stat(reader),
             }
         }
+    };
+
+    #[cfg(feature = "pager")]
+    if args.pager
+        && res
+            .as_ref()
+            .err()
+            .and_then(|e| e.downcast_ref::<std::io::Error>())
+            .map(|e| e.kind())
+            == Some(std::io::ErrorKind::BrokenPipe)
+    {
+        // If we display an output via a pager, a user may close that pager
+        // before we are done producing output. This is expected, especially in
+        // cases where we produse way more data than the user is interested in.
+        return Ok(());
     }
+
+    res
 }
 
 /// Collect and display stats for a trace file containint encap packets

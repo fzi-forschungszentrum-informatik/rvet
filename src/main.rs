@@ -2,11 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::BTreeMap;
+use std::io::Write;
 use std::num::NonZeroU8;
 
 use anyhow::Context;
 use cli_table::{Cell, Table};
 use riscv_etrace::{packet, tracer};
+use riscv_etrace::instruction::info::MakeDecode;
 
 mod binary;
 mod cli;
@@ -15,10 +17,6 @@ mod reader;
 mod stat;
 
 fn main() -> anyhow::Result<()> {
-    use std::io::Write;
-
-    use riscv_etrace::instruction::info::MakeDecode;
-
     let args: cli::Cli = clap::Parser::parse();
 
     #[cfg(feature = "pager")]

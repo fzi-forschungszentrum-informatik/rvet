@@ -254,7 +254,10 @@ impl<R: std::io::Read> BufReader<R> {
         }
 
         let availible = &self.buffer[self.pos..];
-        let res = &availible[..n];
+        let res = availible
+            .split_at_checked(n)
+            .map(|(b, _)| b)
+            .unwrap_or(availible);
         Ok(unsafe { res.assume_init_ref() })
     }
 

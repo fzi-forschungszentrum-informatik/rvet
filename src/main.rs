@@ -7,8 +7,8 @@ use std::num::NonZeroU8;
 
 use anyhow::Context;
 use cli_table::{Cell, Table};
-use riscv_etrace::{packet, tracer};
 use riscv_etrace::instruction::info::MakeDecode;
+use riscv_etrace::{packet, tracer};
 
 mod binary;
 mod cli;

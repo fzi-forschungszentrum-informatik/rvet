@@ -106,18 +106,17 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
-    #[cfg(feature = "pager")]
-    if args.pager
-        && res
-            .as_ref()
-            .err()
-            .and_then(|e| e.downcast_ref::<std::io::Error>())
-            .map(|e| e.kind())
-            == Some(std::io::ErrorKind::BrokenPipe)
+    if res
+        .as_ref()
+        .err()
+        .and_then(|e| e.downcast_ref::<std::io::Error>())
+        .map(|e| e.kind())
+        == Some(std::io::ErrorKind::BrokenPipe)
     {
-        // If we display an output via a pager, a user may close that pager
-        // before we are done producing output. This is expected, especially in
-        // cases where we produse way more data than the user is interested in.
+        // The output may be piped into some other program that may exit before
+        // we are done producing output. This is expected, especially when we
+        // are paging output and produce way more data than the user is actually
+        // interested in.
         return Ok(());
     }
 

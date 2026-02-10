@@ -4,10 +4,17 @@
 
 use anyhow::Context;
 use riscv_etrace::binary;
+use riscv_etrace::instruction::bits::Bits;
 use riscv_isa::Target;
 
 /// Type of binary produced by the builder
-pub type Binary = binary::boxed::Binary<'static, riscv_isa::Instruction>;
+pub type Binary = binary::boxed::Binary<'static, Instruction>;
+
+/// Type of instruction info produced by binaries produced by the builder
+pub type Instruction = (
+    either::Either<riscv_isa::Compressed, riscv_isa::Instruction>,
+    Bits,
+);
 
 #[derive(Clone, Debug, clap::Args)]
 pub struct Args {

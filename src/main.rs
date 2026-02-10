@@ -84,14 +84,12 @@ fn main() -> anyhow::Result<()> {
                     let item = i.context("Error during trace")?;
                     printer.process_item(item).map_err(anyhow::Error::from)
                 })?;
-                if let Some(packet::payload::InstructionTrace::Synchronization(
-                    packet::sync::Synchronization::Support(s),
-                )) = payload.as_instruction_trace()
-                    && s.qual_status != packet::sync::QualStatus::NoChange
-                {
-                    writeln!(out, "--- {}", s.qual_status)?;
-                }
-                Ok(())
+
+                let status = tracer
+                    .qual_status()
+                    .filter(|s| *s != packet::sync::QualStatus::NoChange)
+                    .into_iter();
+                printer.report(status).map_err(Into::into)
             })
         }
         cli::Command::Stat { trace } => {

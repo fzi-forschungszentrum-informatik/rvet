@@ -12,6 +12,6 @@ clap = { version = "4.5", features = ["derive"] }
 cli-table = { version = "0.5", default-features = false, features = ["title"] }
 elf = "0.8"
 pager = { version = "0.16", optional = true }
-riscv-etrace = { version = "0.8", features = ["alloc", "elf", "riscv-isa", "serde"] }
+riscv-etrace = { version = "0.9", features = ["alloc", "elf", "riscv-isa", "serde"] }
 riscv-isa = "0.3"
 toml = { version = "0.9", features = ["parse"] }

@@ -157,7 +157,7 @@ struct Spec {
 impl Spec {
     /// Construct a [`Binary`] based on this specification
     fn build(self, target: Target, data: &'static [u8]) -> anyhow::Result<Binary> {
-        use binary::Binary;
+        use binary::Adaptable;
 
         let path = self.path;
 
@@ -233,7 +233,7 @@ impl Rom {
     fn build(self, target: Target) -> Binary {
         use riscv_isa::Xlen;
 
-        use binary::Binary;
+        use binary::Adaptable;
 
         match self {
             Self::Spike => {

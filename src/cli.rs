@@ -109,10 +109,7 @@ pub enum PacketFormat {
 
 /// Encoder unit (type) representation
 #[derive(Copy, Clone, Debug)]
-pub struct Unit {
-    name: &'static str,
-    ctor: fn() -> unit::Plug,
-}
+pub struct Unit(unit::PlugsEntry<'static>);
 
 impl Default for Unit {
     fn default() -> Self {
@@ -124,29 +121,24 @@ impl Default for Unit {
 
 impl From<Unit> for unit::Plug {
     fn from(unit: Unit) -> Self {
-        (unit.ctor)()
+        unit.0.plug()
     }
 }
 
 impl fmt::Display for Unit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(self.name, f)
+        fmt::Display::fmt(self.0.name(), f)
     }
 }
 
 impl clap::ValueEnum for Unit {
     fn value_variants<'a>() -> &'a [Self] {
         static UNITS: std::sync::OnceLock<Vec<Unit>> = std::sync::OnceLock::new();
-        UNITS.get_or_init(|| {
-            unit::PLUGS
-                .iter()
-                .map(|(name, ctor)| Unit { name, ctor: *ctor })
-                .collect()
-        })
+        UNITS.get_or_init(|| unit::PLUGS.iter().copied().map(Unit).collect())
     }
 
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        Some(clap::builder::PossibleValue::new(self.name))
+        Some(clap::builder::PossibleValue::new(self.0.name()))
     }
 }
 
@@ -160,7 +152,7 @@ pub enum Target {
 
 impl From<Target> for riscv_isa::Target {
     fn from(target: Target) -> Self {
-        use riscv_etrace::instruction::info::MakeDecode;
+        use riscv_etrace::instruction::decode::MakeDecode;
 
         match target {
             Target::Rv32I => Self::rv32i_full(),

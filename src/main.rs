@@ -12,6 +12,7 @@ use riscv_etrace::{packet, tracer};
 
 mod binary;
 mod cli;
+mod csv;
 mod pretty;
 mod reader;
 mod stat;

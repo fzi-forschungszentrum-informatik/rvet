@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Packet/payload reading and decoding utilities
 
+use std::collections::{HashMap, hash_map};
 use std::fmt;
 use std::fs::File;
+use std::sync::mpsc;
 
 use anyhow::Context;
 use riscv_etrace::packet;
@@ -205,6 +207,79 @@ impl clap::FromArgMatches for SingleHart {
         }
         Ok(())
     }
+}
+
+/// A [`PacketHandler`] dispatching to a separate threads for each source id
+#[derive(Clone, Debug)]
+pub struct ThreadDispatch {
+    targets: HashMap<u64, mpsc::SyncSender<Payload>>,
+    kind: TDKind,
+    src_id: Vec<u64>,
+}
+
+impl ThreadDispatch {
+    /// Retrieve the target to which dispatch payloads with the given source id
+    fn dispatch(
+        &mut self,
+        src_id: u64,
+        payload: impl TryInto<Payload, Error = packet::error::Error>,
+    ) -> anyhow::Result<Option<(u64, mpsc::Receiver<Payload>)>> {
+        use hash_map::Entry;
+
+        match self.targets.entry(src_id) {
+            Entry::Occupied(e) => {
+                let payload = payload.try_into()?;
+                e.into_mut().send(payload).map_err(|_| EarlyWorkerExit)?;
+                Ok(None)
+            }
+            Entry::Vacant(e) => {
+                if !self.src_id.is_empty() && !self.src_id.contains(&src_id) {
+                    return Ok(None);
+                }
+
+                let (sender, receiver) = mpsc::sync_channel(1024);
+                let payload = payload.try_into()?;
+                e.insert(sender)
+                    .send(payload)
+                    .map_err(|_| EarlyWorkerExit)?;
+                Ok(Some((src_id, receiver)))
+            }
+        }
+    }
+}
+
+impl PacketHandler for ThreadDispatch {
+    type Output = (u64, mpsc::Receiver<Payload>);
+
+    fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
+        match self.kind {
+            TDKind::Encap(flow) => {
+                let packet = decoder.decode_encap_packet()?.into_normal();
+                let Some(packet) = packet.filter(|p| p.flow() == flow) else {
+                    return Ok(None);
+                };
+                let src_id = packet.src_id().into();
+                self.dispatch(src_id, packet)
+            }
+            TDKind::Smi => {
+                let packet = decoder.decode_smi_packet()?;
+                if packet.trace_type().is_none() {
+                    return Ok(None);
+                }
+                let src_id = packet.hart();
+                self.dispatch(src_id, packet)
+            }
+        }
+    }
+}
+
+/// Kind of [`ThreadDispatch`]
+#[derive(Copy, Clone, Debug)]
+pub enum TDKind {
+    /// Decode RISC-V Encapsulation structures
+    Encap(u8),
+    /// Decode Siemens Messaging Infrastructure (SMI) packets
+    Smi,
 }
 
 /// A dummy [`PacketHandler`]

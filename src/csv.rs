@@ -41,3 +41,15 @@ impl Field {
         }
     }
 }
+
+/// Default fields to include in a CSV
+pub const DEFAULT_FIELDS: [Field; 8] = [
+    Field::Source,
+    Field::Address,
+    Field::Instruction,
+    Field::Privilege,
+    Field::Exception,
+    Field::ECause,
+    Field::TVal,
+    Field::Interrupt,
+];

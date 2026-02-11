@@ -144,10 +144,7 @@ pub enum SingleHart {
 }
 
 impl PacketHandler for SingleHart {
-    type Output = packet::payload::Payload<
-        <Plug as packet::unit::Unit>::IOptions,
-        <Plug as packet::unit::Unit>::DOptions,
-    >;
+    type Output = Payload;
 
     fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
         let res = match *self {
@@ -279,3 +276,8 @@ impl<R: std::io::Read> BufReader<R> {
         self.pos = self.pos.saturating_add(amount);
     }
 }
+
+pub type Payload = packet::payload::Payload<
+    <Plug as packet::unit::Unit>::IOptions,
+    <Plug as packet::unit::Unit>::DOptions,
+>;

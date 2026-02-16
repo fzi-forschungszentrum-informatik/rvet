@@ -130,7 +130,7 @@ impl clap::ValueEnum for Unit {
     }
 
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
-        Some(clap::builder::PossibleValue::new(self.0.name()))
+        Some(clap::builder::PossibleValue::new(self.0.name()).help(self.0.description()))
     }
 }
 

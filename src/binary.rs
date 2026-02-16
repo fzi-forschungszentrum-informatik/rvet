@@ -31,12 +31,30 @@ pub struct Args {
 impl Args {
     /// Construct a [`Binary`][binary::Binary] based on these arguments
     pub fn build(self, target: Target) -> anyhow::Result<binary::Multi<Vec<Binary>, Binary>> {
+        self.builder(target).map(Builder::build)
+    }
+
+    /// Construct a [`Builder`] based on these arguments
+    pub fn builder(self, target: Target) -> anyhow::Result<Builder> {
         self.rom
             .map(|r| Ok(r.build(target)))
             .into_iter()
             .chain(self.specs.build(target)?)
-            .map(|r| r.map(|s| s()))
-            .collect()
+            .collect::<Result<_, _>>()
+            .map(|bins| Builder { bins })
+    }
+}
+
+/// A builder for [`Binary`][binary::Binary]
+#[derive(Clone)]
+pub struct Builder {
+    bins: Vec<Arc<dyn Fn() -> Binary>>,
+}
+
+impl Builder {
+    /// Build the [`Binary`][binary::Binary]
+    pub fn build(self) -> binary::Multi<Vec<Binary>, Binary> {
+        self.bins.iter().map(|s| s()).collect()
     }
 }
 

@@ -108,16 +108,8 @@ pub enum PacketFormat {
 }
 
 /// Encoder unit (type) representation
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct Unit(unit::PlugsEntry<'static>);
-
-impl Default for Unit {
-    fn default() -> Self {
-        *clap::ValueEnum::value_variants()
-            .first()
-            .expect("No plugs exist")
-    }
-}
 
 impl From<Unit> for unit::Plug {
     fn from(unit: Unit) -> Self {

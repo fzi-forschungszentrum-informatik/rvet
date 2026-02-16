@@ -34,7 +34,8 @@ impl Args {
         self.rom
             .map(|r| Ok(r.build(target)))
             .into_iter()
-            .chain(self.specs.build(target)?.map(|r| r.map(|s| s())))
+            .chain(self.specs.build(target)?)
+            .map(|r| r.map(|s| s()))
             .collect()
     }
 }
@@ -242,7 +243,7 @@ pub enum Rom {
 
 impl Rom {
     /// Construct the specified [`Binary`][binary::Binary]s
-    fn build(self, target: Target) -> Binary {
+    fn build(self, target: Target) -> Arc<dyn Fn() -> Binary> {
         use riscv_isa::Xlen;
 
         use binary::Adaptable;
@@ -259,7 +260,7 @@ impl Rom {
                 };
                 binary::from_segment(code, target)
                     .with_offset(0x1000)
-                    .boxed()
+                    .boxer()
             }
         }
     }

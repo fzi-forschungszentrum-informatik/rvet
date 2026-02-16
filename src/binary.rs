@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Utilties for loading and assembling binaries
 
+use std::sync::Arc;
+
 use anyhow::Context;
 use riscv_etrace::binary;
 use riscv_etrace::instruction::bits::Bits;
@@ -32,7 +34,7 @@ impl Args {
         self.rom
             .map(|r| Ok(r.build(target)))
             .into_iter()
-            .chain(self.specs.build(target)?)
+            .chain(self.specs.build(target)?.map(|r| r.map(|s| s())))
             .collect()
     }
 }
@@ -43,7 +45,10 @@ pub struct Specs(Vec<Spec>);
 
 impl Specs {
     /// Construct [`Binary`][binary::Binary]s from these specs
-    fn build(self, target: Target) -> anyhow::Result<impl Iterator<Item = anyhow::Result<Binary>>> {
+    fn build(
+        self,
+        target: Target,
+    ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<Arc<dyn Fn() -> Binary>>>> {
         /// `elf::ElfBytes`, and therefore `binary::elf::Elf`, depend on the
         /// underlying data, which is external. We thus need to load the data
         /// and keep it availible for the `Binary`'s lifetime. And since we need
@@ -163,7 +168,7 @@ struct Spec {
 
 impl Spec {
     /// Construct a [`Binary`] based on this specification
-    fn build(self, target: Target, data: &'static [u8]) -> anyhow::Result<Binary> {
+    fn build(self, target: Target, data: &'static [u8]) -> anyhow::Result<Arc<dyn Fn() -> Binary>> {
         use binary::Adaptable;
 
         let path = self.path;
@@ -182,7 +187,7 @@ impl Spec {
                 })?;
                 let res = binary::basic::from_segment(data, target)
                     .with_offset(offset)
-                    .boxed();
+                    .boxer();
                 Ok(res)
             }
             Kind::Elf => {
@@ -193,9 +198,9 @@ impl Spec {
                     .with_context(|| format!("Could not process ELF file '{}'", path.display(),))?;
 
                 if let Some(offset) = self.offset {
-                    Ok(res.with_offset(offset).boxed())
+                    Ok(res.with_offset(offset).boxer())
                 } else if elf.ehdr.e_type != elf::abi::ET_DYN {
-                    Ok(res.boxed())
+                    Ok(res.boxer())
                 } else {
                     Err(anyhow::anyhow!(
                         "Need offset for shared object '{}'",

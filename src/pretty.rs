@@ -50,6 +50,19 @@ impl<W: Write> Printer<W> {
             _ => Ok(()),
         }
     }
+
+    /// Report in a way that mixes well with the pretty output
+    pub fn report<L>(&mut self, mut lines: L) -> std::io::Result<()>
+    where
+        L: Iterator,
+        L::Item: fmt::Display,
+    {
+        if let Some(first) = lines.next() {
+            writeln!(self.out, "--- {first}")?;
+            lines.try_for_each(|e| writeln!(self.out, "    {e}"))?;
+        }
+        Ok(())
+    }
 }
 
 /// A single tracing item, rendered as a line

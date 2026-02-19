@@ -76,13 +76,22 @@ fn main() -> anyhow::Result<()> {
             let mut printer = pretty::Printer::new(std::io::stdout().lock(), &params);
             reader.try_for_each(|p| {
                 let payload = p?;
-                tracer
+                let res = tracer
                     .process_payload(&payload)
-                    .context("Could not process payload")?;
-                tracer.by_ref().try_for_each(|i| {
+                    .context("Could not process payload");
+                if let Err(err) = res {
+                    printer.report(err.chain())?;
+                    return tracer.is_recovering().then_some(()).ok_or(err);
+                }
+
+                let res = tracer.by_ref().try_for_each(|i| {
                     let item = i.context("Error during trace")?;
                     printer.process_item(item).map_err(anyhow::Error::from)
-                })?;
+                });
+                if let Err(err) = res {
+                    printer.report(err.chain())?;
+                    return tracer.is_recovering().then_some(()).ok_or(err);
+                }
 
                 let status = tracer
                     .qual_status()

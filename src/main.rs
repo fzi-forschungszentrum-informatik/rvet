@@ -82,10 +82,7 @@ fn main() -> anyhow::Result<()> {
                     .context("Could not process payload")?;
                 tracer.by_ref().try_for_each(|i| {
                     let item = i.context("Error during trace")?;
-                    if let Some(item) = printer.process_item(item) {
-                        writeln!(out, "{item}")?;
-                    }
-                    anyhow::Ok(())
+                    printer.process_item(item).map_err(anyhow::Error::from)
                 })?;
                 if let Some(packet::payload::InstructionTrace::Synchronization(
                     packet::sync::Synchronization::Support(s),

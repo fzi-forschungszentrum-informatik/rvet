@@ -31,20 +31,24 @@ impl<W: Write> Printer<W> {
     }
 
     /// Process a single tracing [`Item`]
-    pub fn process_item<I: Info>(&mut self, item: Item<I>) -> Option<ItemLine<I>> {
-        if let item::Kind::Context(ctx) = item.kind() {
-            if Some(ctx) == self.context.as_ref() {
-                return None;
+    pub fn process_item(&mut self, item: Item<impl Info + fmt::Display>) -> std::io::Result<()> {
+        let pc = item.pc();
+        let addr_width = self.address_width.get().into();
+
+        match item.kind() {
+            item::Kind::Regular(insn) => writeln!(self.out, "{pc:0addr_width$x}  {}", insn.info),
+            item::Kind::Trap(info) => writeln!(self.out, "{pc:0addr_width$x}  {info}"),
+            item::Kind::Context(ctx) if self.context.as_ref() != Some(ctx) => {
+                self.context = Some(*ctx);
+                let privilege = ctx.privilege;
+                write!(self.out, "{0:addr_width$}  Context: {privilege}-mode", "")?;
+                if self.show_context {
+                    write!(self.out, " ctx: {}", ctx.context)?;
+                }
+                writeln!(self.out)
             }
-
-            self.context = Some(*ctx);
+            _ => Ok(()),
         }
-
-        Some(ItemLine {
-            item,
-            address_width: self.address_width,
-            show_context: self.show_context,
-        })
     }
 }
 

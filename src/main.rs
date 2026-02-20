@@ -73,8 +73,8 @@ fn main() -> anyhow::Result<()> {
                 .build::<riscv_etrace::types::stack::NoStack, _>()
                 .context("Could not set up tracer")?;
 
-            let mut item_gen = pretty::ItemGen::new(&params);
-            let mut out = std::io::stdout().lock();
+            let mut printer = pretty::Printer::new(std::io::stdout(), &params);
+            let mut out = std::io::stdout();
             reader.try_for_each(|p| {
                 let payload = p?;
                 tracer
@@ -82,7 +82,7 @@ fn main() -> anyhow::Result<()> {
                     .context("Could not process payload")?;
                 tracer.by_ref().try_for_each(|i| {
                     let item = i.context("Error during trace")?;
-                    if let Some(item) = item_gen.process_item(item) {
+                    if let Some(item) = printer.process_item(item) {
                         writeln!(out, "{item}")?;
                     }
                     anyhow::Ok(())

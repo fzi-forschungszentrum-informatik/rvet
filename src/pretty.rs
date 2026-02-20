@@ -3,6 +3,7 @@
 //! Pretty printing and general rendering utilities
 
 use std::fmt;
+use std::io::Write;
 use std::num::NonZeroU8;
 
 use riscv_etrace::config::Parameters;
@@ -10,20 +11,19 @@ use riscv_etrace::instruction::info::Info;
 use riscv_etrace::tracer::item::{self, Item};
 use riscv_etrace::types::Context;
 
-/// Generator for [`ItemLine`]s
-pub struct ItemGen {
+/// Pretty-printer for [`Item`]s
+pub struct Printer<W: Write> {
+    out: W,
     context: Option<Context>,
     address_width: NonZeroU8,
     show_context: bool,
 }
 
-impl ItemGen {
-    /// Create a new [`ItemLine`] generator
-    ///
-    /// The generator will generate lines with some features (e.g. field widths)
-    /// tailored to the given [`Parameters`]
-    pub fn new(params: &Parameters) -> Self {
+impl<W: Write> Printer<W> {
+    /// Create a new pretty-printer
+    pub fn new(out: W, params: &Parameters) -> Self {
         Self {
+            out,
             context: Default::default(),
             address_width: params.iaddress_width_p.div_ceil(NonZeroU8::new(4).unwrap()),
             show_context: !params.nocontext_p,

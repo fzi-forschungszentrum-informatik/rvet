@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Packet/payload reading and decoding utilities
 
+use std::fmt;
 use std::fs::File;
 
 use anyhow::Context;
@@ -215,6 +216,18 @@ impl PacketHandler for DefaultHandler {
 
     fn handle(&mut self, _decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
         Ok(None)
+    }
+}
+
+/// Error type signalling early worker exit
+#[derive(Copy, Clone, Default, Debug)]
+pub struct EarlyWorkerExit;
+
+impl std::error::Error for EarlyWorkerExit {}
+
+impl fmt::Display for EarlyWorkerExit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Worker thread existted prematurely")
     }
 }
 

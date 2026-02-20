@@ -73,8 +73,7 @@ fn main() -> anyhow::Result<()> {
                 .build::<riscv_etrace::types::stack::NoStack, _>()
                 .context("Could not set up tracer")?;
 
-            let mut item_gen = pretty::ItemGen::new(&params);
-            let mut out = std::io::stdout().lock();
+            let mut printer = pretty::Printer::new(std::io::stdout().lock(), &params);
             reader.try_for_each(|p| {
                 let payload = p?;
                 tracer
@@ -82,19 +81,14 @@ fn main() -> anyhow::Result<()> {
                     .context("Could not process payload")?;
                 tracer.by_ref().try_for_each(|i| {
                     let item = i.context("Error during trace")?;
-                    if let Some(item) = item_gen.process_item(item) {
-                        writeln!(out, "{item}")?;
-                    }
-                    anyhow::Ok(())
+                    printer.process_item(item).map_err(anyhow::Error::from)
                 })?;
-                if let Some(packet::payload::InstructionTrace::Synchronization(
-                    packet::sync::Synchronization::Support(s),
-                )) = payload.as_instruction_trace()
-                    && s.qual_status != packet::sync::QualStatus::NoChange
-                {
-                    writeln!(out, "--- {}", s.qual_status)?;
-                }
-                Ok(())
+
+                let status = tracer
+                    .qual_status()
+                    .filter(|s| *s != packet::sync::QualStatus::NoChange)
+                    .into_iter();
+                printer.report(status).map_err(Into::into)
             })
         }
         cli::Command::Stat { trace } => {

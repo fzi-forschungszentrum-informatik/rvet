@@ -73,8 +73,7 @@ fn main() -> anyhow::Result<()> {
                 .build::<riscv_etrace::types::stack::NoStack, _>()
                 .context("Could not set up tracer")?;
 
-            let mut printer = pretty::Printer::new(std::io::stdout(), &params);
-            let mut out = std::io::stdout();
+            let mut printer = pretty::Printer::new(std::io::stdout().lock(), &params);
             reader.try_for_each(|p| {
                 let payload = p?;
                 tracer

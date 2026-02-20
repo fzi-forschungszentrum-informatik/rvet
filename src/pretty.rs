@@ -17,6 +17,7 @@ pub struct Printer<W: Write> {
     context: Option<Context>,
     address_width: NonZeroU8,
     show_context: bool,
+    msg_last: bool,
 }
 
 impl<W: Write> Printer<W> {
@@ -27,6 +28,7 @@ impl<W: Write> Printer<W> {
             context: Default::default(),
             address_width: params.iaddress_width_p.div_ceil(NonZeroU8::new(4).unwrap()),
             show_context: !params.nocontext_p,
+            msg_last: false,
         }
     }
 
@@ -34,6 +36,11 @@ impl<W: Write> Printer<W> {
     pub fn process_item(&mut self, item: Item<impl Info + fmt::Display>) -> std::io::Result<()> {
         let pc = item.pc();
         let addr_width = self.address_width.get().into();
+
+        if self.msg_last {
+            self.msg_last = false;
+            writeln!(self.out)?;
+        }
 
         match item.kind() {
             item::Kind::Regular(insn) => writeln!(self.out, "{pc:0addr_width$x}  {}", insn.info),
@@ -58,6 +65,7 @@ impl<W: Write> Printer<W> {
         L::Item: fmt::Display,
     {
         if let Some(first) = lines.next() {
+            self.msg_last = true;
             writeln!(self.out, "--- {first}")?;
             lines.try_for_each(|e| writeln!(self.out, "    {e}"))?;
         }

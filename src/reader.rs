@@ -2,7 +2,10 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Packet/payload reading and decoding utilities
 
+use std::collections::{HashMap, hash_map};
+use std::fmt;
 use std::fs::File;
+use std::sync::mpsc;
 
 use anyhow::Context;
 use riscv_etrace::packet;
@@ -144,10 +147,7 @@ pub enum SingleHart {
 }
 
 impl PacketHandler for SingleHart {
-    type Output = packet::payload::Payload<
-        <Plug as packet::unit::Unit>::IOptions,
-        <Plug as packet::unit::Unit>::DOptions,
-    >;
+    type Output = Payload;
 
     fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
         let res = match *self {
@@ -209,6 +209,117 @@ impl clap::FromArgMatches for SingleHart {
     }
 }
 
+/// A [`PacketHandler`] dispatching to a separate threads for each source id
+#[derive(Clone, Debug, clap::Args)]
+pub struct ThreadDispatch {
+    #[arg(skip)]
+    targets: HashMap<u64, mpsc::SyncSender<Payload>>,
+    #[command(flatten)]
+    kind: TDKind,
+
+    /// Restrict processing to payloads from these sources
+    #[arg(long)]
+    src_id: Vec<u64>,
+}
+
+impl ThreadDispatch {
+    /// Retrieve the target to which dispatch payloads with the given source id
+    fn dispatch(
+        &mut self,
+        src_id: u64,
+        payload: impl TryInto<Payload, Error = packet::error::Error>,
+    ) -> anyhow::Result<Option<(u64, mpsc::Receiver<Payload>)>> {
+        use hash_map::Entry;
+
+        match self.targets.entry(src_id) {
+            Entry::Occupied(e) => {
+                let payload = payload.try_into()?;
+                e.into_mut().send(payload).map_err(|_| EarlyWorkerExit)?;
+                Ok(None)
+            }
+            Entry::Vacant(e) => {
+                if !self.src_id.is_empty() && !self.src_id.contains(&src_id) {
+                    return Ok(None);
+                }
+
+                let (sender, receiver) = mpsc::sync_channel(1024);
+                let payload = payload.try_into()?;
+                e.insert(sender)
+                    .send(payload)
+                    .map_err(|_| EarlyWorkerExit)?;
+                Ok(Some((src_id, receiver)))
+            }
+        }
+    }
+}
+
+impl PacketHandler for ThreadDispatch {
+    type Output = (u64, mpsc::Receiver<Payload>);
+
+    fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
+        match self.kind {
+            TDKind::Encap(flow) => {
+                let packet = decoder.decode_encap_packet()?.into_normal();
+                let Some(packet) = packet.filter(|p| p.flow() == flow) else {
+                    return Ok(None);
+                };
+                let src_id = packet.src_id().into();
+                self.dispatch(src_id, packet)
+            }
+            TDKind::Smi => {
+                let packet = decoder.decode_smi_packet()?;
+                if packet.trace_type().is_none() {
+                    return Ok(None);
+                }
+                let src_id = packet.hart();
+                self.dispatch(src_id, packet)
+            }
+        }
+    }
+}
+
+/// Kind of [`ThreadDispatch`]
+#[derive(Copy, Clone, Debug)]
+pub enum TDKind {
+    /// Decode RISC-V Encapsulation structures
+    Encap(u8),
+    /// Decode Siemens Messaging Infrastructure (SMI) packets
+    Smi,
+}
+
+impl clap::Args for TDKind {
+    fn augment_args(cmd: clap::Command) -> clap::Command {
+        Self::augment_args_for_update(cmd)
+    }
+
+    fn augment_args_for_update(cmd: clap::Command) -> clap::Command {
+        cmd.arg(clap::arg!(--"flow" <ID> "Process packets with this flow indicator"))
+    }
+}
+
+impl clap::FromArgMatches for TDKind {
+    fn from_arg_matches(matches: &clap::ArgMatches) -> Result<Self, clap::Error> {
+        use crate::cli::PacketFormat;
+
+        let format = matches.get_one("format").cloned().unwrap_or_default();
+        let mut res = match format {
+            PacketFormat::Encap => Self::Encap(0),
+            PacketFormat::Smi => Self::Smi,
+        };
+        res.update_from_arg_matches(matches)?;
+        Ok(res)
+    }
+
+    fn update_from_arg_matches(&mut self, matches: &clap::ArgMatches) -> Result<(), clap::Error> {
+        if let Self::Encap(flow) = self
+            && let Some(f) = matches.get_one("flow")
+        {
+            *flow = *f;
+        }
+        Ok(())
+    }
+}
+
 /// A dummy [`PacketHandler`]
 #[derive(Copy, Clone, Default, Debug)]
 pub struct DefaultHandler;
@@ -218,6 +329,18 @@ impl PacketHandler for DefaultHandler {
 
     fn handle(&mut self, _decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
         Ok(None)
+    }
+}
+
+/// Error type signalling early worker exit
+#[derive(Copy, Clone, Default, Debug)]
+pub struct EarlyWorkerExit;
+
+impl std::error::Error for EarlyWorkerExit {}
+
+impl fmt::Display for EarlyWorkerExit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Worker thread existted prematurely")
     }
 }
 
@@ -279,3 +402,8 @@ impl<R: std::io::Read> BufReader<R> {
         self.pos = self.pos.saturating_add(amount);
     }
 }
+
+pub type Payload = packet::payload::Payload<
+    <Plug as packet::unit::Unit>::IOptions,
+    <Plug as packet::unit::Unit>::DOptions,
+>;

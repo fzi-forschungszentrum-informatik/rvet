@@ -7,9 +7,12 @@ use std::io::Write;
 use std::num::NonZeroU8;
 
 use riscv_etrace::config::Parameters;
-use riscv_etrace::instruction::info::Info;
+use riscv_etrace::instruction;
 use riscv_etrace::tracer::item::{self, Item};
 use riscv_etrace::types::Context;
+
+use instruction::bits::Bits;
+use instruction::info::Info;
 
 /// Pretty-printer for [`Item`]s
 pub struct Printer<W: Write> {
@@ -33,7 +36,10 @@ impl<W: Write> Printer<W> {
     }
 
     /// Process a single tracing [`Item`]
-    pub fn process_item(&mut self, item: Item<impl Info + fmt::Display>) -> std::io::Result<()> {
+    pub fn process_item(
+        &mut self,
+        item: Item<(impl Info + fmt::Display, Bits)>,
+    ) -> std::io::Result<()> {
         let pc = item.pc();
         let addr_width = self.address_width.get().into();
 
@@ -43,7 +49,7 @@ impl<W: Write> Printer<W> {
         }
 
         match item.kind() {
-            item::Kind::Regular(insn) => writeln!(self.out, "{pc:0addr_width$x}  {}", insn.info),
+            item::Kind::Regular(insn) => writeln!(self.out, "{pc:0addr_width$x}  {}", insn.info.0),
             item::Kind::Trap(info) => writeln!(self.out, "{pc:0addr_width$x}  {info}"),
             item::Kind::Context(ctx) if self.context.as_ref() != Some(ctx) => {
                 self.context = Some(*ctx);

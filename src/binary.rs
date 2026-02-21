@@ -2,12 +2,21 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Utilties for loading and assembling binaries
 
+use std::sync::Arc;
+
 use anyhow::Context;
 use riscv_etrace::binary;
+use riscv_etrace::instruction::bits::Bits;
 use riscv_isa::Target;
 
 /// Type of binary produced by the builder
-pub type Binary = binary::boxed::Binary<'static, riscv_isa::Instruction>;
+pub type Binary = binary::boxed::Binary<'static, Instruction>;
+
+/// Type of instruction info produced by binaries produced by the builder
+pub type Instruction = (
+    either::Either<riscv_isa::Compressed, riscv_isa::Instruction>,
+    Bits,
+);
 
 #[derive(Clone, Debug, clap::Args)]
 pub struct Args {
@@ -22,11 +31,30 @@ pub struct Args {
 impl Args {
     /// Construct a [`Binary`][binary::Binary] based on these arguments
     pub fn build(self, target: Target) -> anyhow::Result<binary::Multi<Vec<Binary>, Binary>> {
+        self.builder(target).map(Builder::build)
+    }
+
+    /// Construct a [`Builder`] based on these arguments
+    pub fn builder(self, target: Target) -> anyhow::Result<Builder> {
         self.rom
             .map(|r| Ok(r.build(target)))
             .into_iter()
             .chain(self.specs.build(target)?)
-            .collect()
+            .collect::<Result<_, _>>()
+            .map(|bins| Builder { bins })
+    }
+}
+
+/// A builder for [`Binary`][binary::Binary]
+#[derive(Clone)]
+pub struct Builder {
+    bins: Vec<Arc<dyn Fn() -> Binary>>,
+}
+
+impl Builder {
+    /// Build the [`Binary`][binary::Binary]
+    pub fn build(self) -> binary::Multi<Vec<Binary>, Binary> {
+        self.bins.iter().map(|s| s()).collect()
     }
 }
 
@@ -36,7 +64,10 @@ pub struct Specs(Vec<Spec>);
 
 impl Specs {
     /// Construct [`Binary`][binary::Binary]s from these specs
-    fn build(self, target: Target) -> anyhow::Result<impl Iterator<Item = anyhow::Result<Binary>>> {
+    fn build(
+        self,
+        target: Target,
+    ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<Arc<dyn Fn() -> Binary>>>> {
         /// `elf::ElfBytes`, and therefore `binary::elf::Elf`, depend on the
         /// underlying data, which is external. We thus need to load the data
         /// and keep it availible for the `Binary`'s lifetime. And since we need
@@ -156,7 +187,7 @@ struct Spec {
 
 impl Spec {
     /// Construct a [`Binary`] based on this specification
-    fn build(self, target: Target, data: &'static [u8]) -> anyhow::Result<Binary> {
+    fn build(self, target: Target, data: &'static [u8]) -> anyhow::Result<Arc<dyn Fn() -> Binary>> {
         use binary::Adaptable;
 
         let path = self.path;
@@ -175,7 +206,7 @@ impl Spec {
                 })?;
                 let res = binary::basic::from_segment(data, target)
                     .with_offset(offset)
-                    .boxed();
+                    .boxer();
                 Ok(res)
             }
             Kind::Elf => {
@@ -186,9 +217,9 @@ impl Spec {
                     .with_context(|| format!("Could not process ELF file '{}'", path.display(),))?;
 
                 if let Some(offset) = self.offset {
-                    Ok(res.with_offset(offset).boxed())
+                    Ok(res.with_offset(offset).boxer())
                 } else if elf.ehdr.e_type != elf::abi::ET_DYN {
-                    Ok(res.boxed())
+                    Ok(res.boxer())
                 } else {
                     Err(anyhow::anyhow!(
                         "Need offset for shared object '{}'",
@@ -230,7 +261,7 @@ pub enum Rom {
 
 impl Rom {
     /// Construct the specified [`Binary`][binary::Binary]s
-    fn build(self, target: Target) -> Binary {
+    fn build(self, target: Target) -> Arc<dyn Fn() -> Binary> {
         use riscv_isa::Xlen;
 
         use binary::Adaptable;
@@ -247,7 +278,7 @@ impl Rom {
                 };
                 binary::from_segment(code, target)
                     .with_offset(0x1000)
-                    .boxed()
+                    .boxer()
             }
         }
     }

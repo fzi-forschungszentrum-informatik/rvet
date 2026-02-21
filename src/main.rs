@@ -127,6 +127,35 @@ fn main() -> anyhow::Result<()> {
     res
 }
 
+/// Collect join handlers and handle anny errors
+fn collect_threads<'s>(
+    mut threads: impl Iterator<
+        Item = anyhow::Result<std::thread::ScopedJoinHandle<'s, anyhow::Result<()>>>,
+    >,
+) -> anyhow::Result<()> {
+    let mut join_handles = Vec::new();
+    let res = threads.try_for_each(|t| {
+        join_handles.push(t?);
+        anyhow::Ok(())
+    });
+
+    if res.as_ref().map_err(|e| e.is::<reader::EarlyWorkerExit>()) == Err(false) {
+        // We ran into some error during dispatch. Make sure that we
+        // report _that_ rather than whtever the workers will report.
+        return res;
+    }
+
+    // Make sure that all threads finish, and look through them for
+    // errors.
+    drop(threads);
+    join_handles.into_iter().try_for_each(|t| {
+        t.join()
+            .map_err(|_| anyhow::anyhow!("Error in worker thread"))
+            .flatten()
+    })?;
+    res
+}
+
 /// Collect and display stats for a trace file containint encap packets
 fn encap_stat(reader: reader::Reader) -> anyhow::Result<()> {
     let mut normal: BTreeMap<_, u64> = Default::default();

@@ -115,6 +115,47 @@ impl fmt::Display for Line<'_> {
     }
 }
 
+/// CSV fields
+#[derive(Clone, Debug)]
+pub struct Fields {
+    fields: Arc<[Field]>,
+}
+
+impl Fields {
+    /// Write the CSV header
+    pub fn write_header(&self, mut writer: impl Write) -> anyhow::Result<()> {
+        let mut line = self.fields.iter().map(|f| f.header());
+        if let Some(first) = line.next() {
+            write!(writer, "{first}")?;
+            line.try_for_each(|t| write!(writer, ",{t}"))?;
+        }
+        writeln!(writer).map_err(Into::into)
+    }
+
+    /// Create a [`Writer`] from this builder
+    pub fn writer<W: Write>(&self, writer: W, src_id: u64) -> Writer<W> {
+        let buffer = Box::new_uninit_slice(16 * 1024);
+        Writer {
+            inner: writer,
+            buffer: Cursor::new(unsafe { buffer.assume_init() }),
+            fields: self.fields.clone(),
+            src_id,
+            context: Default::default(),
+        }
+    }
+}
+
+impl From<Vec<Field>> for Fields {
+    fn from(fields: Vec<Field>) -> Self {
+        let fields = if fields.is_empty() {
+            DEFAULT_FIELDS.into()
+        } else {
+            fields.into()
+        };
+        Self { fields }
+    }
+}
+
 /// CSV field to include
 #[derive(Copy, Clone, Debug, clap::ValueEnum)]
 pub enum Field {

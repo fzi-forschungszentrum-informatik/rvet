@@ -15,6 +15,7 @@ mod cli;
 mod pretty;
 mod reader;
 mod stat;
+mod util;
 
 fn main() -> anyhow::Result<()> {
     let args: cli::Cli = clap::Parser::parse();

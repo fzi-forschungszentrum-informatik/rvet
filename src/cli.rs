@@ -85,6 +85,10 @@ pub enum Command {
         #[command(flatten)]
         filter: SingleHart,
 
+        /// Show playloads in between trace output
+        #[arg(long, action = clap::ArgAction::SetTrue)]
+        show_payloads: bool,
+
         /// Trace file
         trace: PathBuf,
 

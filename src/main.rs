@@ -66,6 +66,7 @@ fn main() -> anyhow::Result<()> {
         }
         cli::Command::Trace {
             filter,
+            show_payloads,
             trace,
             program,
         } => {
@@ -78,6 +79,7 @@ fn main() -> anyhow::Result<()> {
             let mut printer = pretty::Printer::new(std::io::stdout().lock(), &params);
             reader.try_for_each(|p| {
                 let payload = p?;
+                printer.report(show_payloads.then_some(&payload), false)?;
                 let res = tracer
                     .process_payload(&payload)
                     .context("Could not process payload");

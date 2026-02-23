@@ -5,6 +5,8 @@
 use std::fmt;
 use std::path::PathBuf;
 
+use anyhow::Context;
+use clap::builder::TypedValueParser;
 use riscv_etrace::packet::unit;
 
 use crate::binary;
@@ -150,5 +152,22 @@ impl From<Target> for riscv_isa::Target {
             Target::Rv32I => Self::rv32i_full(),
             Target::Rv64I => Self::rv64i_full(),
         }
+    }
+}
+
+/// File to write output to
+#[derive(Clone, Debug)]
+pub struct Output(PathBuf);
+
+impl Output {
+    /// Open this file
+    pub fn open(self) -> anyhow::Result<std::fs::File> {
+        std::fs::File::create(&self.0)
+            .with_context(|| format!("Could not open file '{}' for writing", self.0.display()))
+    }
+
+    /// Create a [`TypedValueParser`] for this type
+    pub fn value_parser() -> impl TypedValueParser<Value = Self> {
+        clap::builder::PathBufValueParser::new().map(Output)
     }
 }

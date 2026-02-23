@@ -49,8 +49,8 @@ impl<W: Write> Printer<W> {
         }
 
         match item.kind() {
-            item::Kind::Regular(insn) => writeln!(self.out, "{pc:0addr_width$x}  {}", insn.info.0),
-            item::Kind::Trap(info) => writeln!(self.out, "{pc:0addr_width$x}  {info}"),
+            item::Kind::Regular(insn) => writeln!(self.out, "{pc:addr_width$x}  {}", insn.info.0),
+            item::Kind::Trap(info) => writeln!(self.out, "{pc:addr_width$x}  {info}"),
             item::Kind::Context(ctx) if self.context.as_ref() != Some(ctx) => {
                 self.context = Some(*ctx);
                 let privilege = ctx.privilege;

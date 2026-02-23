@@ -49,7 +49,10 @@ impl<W: Write> Printer<W> {
         }
 
         match item.kind() {
-            item::Kind::Regular(insn) => writeln!(self.out, "{pc:addr_width$x}  {}", insn.info.0),
+            item::Kind::Regular(insn) => {
+                let (insn, bits) = &insn.info;
+                writeln!(self.out, "{pc:addr_width$x}  {:<8}  {insn}", bits.to_string())
+            }
             item::Kind::Trap(info) => writeln!(self.out, "{pc:addr_width$x}  {info}"),
             item::Kind::Context(ctx) if self.context.as_ref() != Some(ctx) => {
                 self.context = Some(*ctx);

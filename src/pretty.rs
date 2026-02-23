@@ -72,11 +72,12 @@ impl<W: Write> Printer<W> {
     }
 
     /// Report in a way that mixes well with the pretty output
-    pub fn report<L>(&mut self, mut lines: L) -> std::io::Result<()>
+    pub fn report<L>(&mut self, lines: L) -> std::io::Result<()>
     where
-        L: Iterator,
+        L: IntoIterator,
         L::Item: fmt::Display,
     {
+        let mut lines = lines.into_iter();
         if let Some(first) = lines.next() {
             self.msg_last = true;
             writeln!(self.out, "--- {first}")?;

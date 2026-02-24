@@ -10,7 +10,8 @@ use clap::builder::TypedValueParser;
 use riscv_etrace::packet::unit;
 
 use crate::binary;
-use crate::reader::SingleHart;
+use crate::csv;
+use crate::reader::{SingleHart, ThreadDispatch};
 
 #[derive(clap::Parser)]
 #[command(version, about)]
@@ -95,6 +96,25 @@ pub enum Command {
         /// Program binaries to trace
         #[command(flatten)]
         program: binary::Args,
+    },
+    Csv {
+        #[command(flatten)]
+        dispatch: ThreadDispatch,
+
+        /// Trace file
+        trace: PathBuf,
+
+        /// Program binaries to trace
+        #[command(flatten)]
+        program: binary::Args,
+
+        /// Path of output file
+        #[arg(long, value_name("PATH"), value_parser = Output::value_parser())]
+        csv: Option<Output>,
+
+        /// CSV fields
+        #[arg(long, value_name("FIELD"))]
+        fields: Vec<csv::Field>,
     },
     /// List number of packets for different sources, destinations and types
     Stat {

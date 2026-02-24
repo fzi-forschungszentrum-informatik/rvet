@@ -103,6 +103,52 @@ fn main() -> anyhow::Result<()> {
                 printer.report(status, true).map_err(Into::into)
             })
         }
+        cli::Command::Csv {
+            dispatch,
+            trace,
+            program,
+            csv,
+            fields,
+        } => std::thread::scope(|scope| {
+            let reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(dispatch);
+            let make_write = csv
+                .map(cli::Output::open)
+                .transpose()?
+                .map(|file| {
+                    let file = util::LockingFile::new(file);
+                    Box::new(move || Box::new(file.clone()) as Box<dyn Write + Send>)
+                        as Box<dyn Fn() -> Box<dyn Write + Send>>
+                })
+                .unwrap_or(Box::new(|| Box::new(std::io::stdout())));
+            let mut out = make_write();
+            let fields: csv::Fields = fields.into();
+            fields.write_header(&mut out)?;
+
+            let res = reader.map(|r| {
+                let (src_id, receiver) = r?;
+                let mut tracer = tracer
+                    .with_binary(program.clone().build(target)?)
+                    .build::<riscv_etrace::types::stack::NoStack, _>()
+                    .context("Could not set up tracer")?;
+                let mut writer = fields.writer(make_write(), src_id);
+                anyhow::Ok(scope.spawn(move || {
+                    receiver.into_iter().try_for_each(|p| {
+                        tracer
+                            .process_payload(&p)
+                            .context("Could not process payload")?;
+                        tracer.by_ref().try_for_each(|i| {
+                            let item = i.context("Error during trace")?;
+                            writer.feed(item)
+                        })
+                    })?;
+                    writer.flush()
+                }))
+            });
+
+            let res = collect_threads(res);
+            out.flush()?;
+            res
+        }),
         cli::Command::Stat { trace } => {
             let reader = reader::Reader::new(trace.as_ref(), decoder)?;
             match args.format {
@@ -126,6 +172,35 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
 
+    res
+}
+
+/// Collect join handlers and handle anny errors
+fn collect_threads<'s>(
+    mut threads: impl Iterator<
+        Item = anyhow::Result<std::thread::ScopedJoinHandle<'s, anyhow::Result<()>>>,
+    >,
+) -> anyhow::Result<()> {
+    let mut join_handles = Vec::new();
+    let res = threads.try_for_each(|t| {
+        join_handles.push(t?);
+        anyhow::Ok(())
+    });
+
+    if res.as_ref().map_err(|e| e.is::<reader::EarlyWorkerExit>()) == Err(false) {
+        // We ran into some error during dispatch. Make sure that we
+        // report _that_ rather than whtever the workers will report.
+        return res;
+    }
+
+    // Make sure that all threads finish, and look through them for
+    // errors.
+    drop(threads);
+    join_handles.into_iter().try_for_each(|t| {
+        t.join()
+            .map_err(|_| anyhow::anyhow!("Error in worker thread"))
+            .flatten()
+    })?;
     res
 }
 

@@ -5,7 +5,8 @@ format defined in the [Efficient Trace for RISC-V][etrace] specification. It
 currently provides subcommands for:
 
 * displaying payloads from a single HART,
-* tracing a single HART and
+* tracing a single HART,
+* converting a trace into a CSV and
 * gathering packet statistics.
 
 When built with the `pager` feature, output is displayed via the pager provided

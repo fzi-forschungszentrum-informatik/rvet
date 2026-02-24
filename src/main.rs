@@ -82,7 +82,7 @@ fn main() -> anyhow::Result<()> {
                     .process_payload(&payload)
                     .context("Could not process payload");
                 if let Err(err) = res {
-                    printer.report(err.chain())?;
+                    printer.report(err.chain(), true)?;
                     return tracer.is_recovering().then_some(()).ok_or(err);
                 }
 
@@ -91,15 +91,14 @@ fn main() -> anyhow::Result<()> {
                     printer.process_item(item).map_err(anyhow::Error::from)
                 });
                 if let Err(err) = res {
-                    printer.report(err.chain())?;
+                    printer.report(err.chain(), true)?;
                     return tracer.is_recovering().then_some(()).ok_or(err);
                 }
 
                 let status = tracer
                     .qual_status()
-                    .filter(|s| *s != packet::sync::QualStatus::NoChange)
-                    .into_iter();
-                printer.report(status).map_err(Into::into)
+                    .filter(|s| *s != packet::sync::QualStatus::NoChange);
+                printer.report(status, true).map_err(Into::into)
             })
         }
         cli::Command::Stat { trace } => {

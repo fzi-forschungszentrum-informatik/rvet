@@ -20,7 +20,7 @@ pub struct Printer<W: Write> {
     context: Option<Context>,
     address_width: NonZeroU8,
     show_context: bool,
-    msg_last: bool,
+    feed_blank: bool,
 }
 
 impl<W: Write> Printer<W> {
@@ -31,7 +31,7 @@ impl<W: Write> Printer<W> {
             context: Default::default(),
             address_width: params.iaddress_width_p.div_ceil(NonZeroU8::new(4).unwrap()),
             show_context: !params.nocontext_p,
-            msg_last: false,
+            feed_blank: false,
         }
     }
 
@@ -43,8 +43,8 @@ impl<W: Write> Printer<W> {
         let pc = item.pc();
         let addr_width = self.address_width.get().into();
 
-        if self.msg_last {
-            self.msg_last = false;
+        if self.feed_blank {
+            self.feed_blank = false;
             writeln!(self.out)?;
         }
 
@@ -72,13 +72,18 @@ impl<W: Write> Printer<W> {
     }
 
     /// Report in a way that mixes well with the pretty output
-    pub fn report<L>(&mut self, mut lines: L) -> std::io::Result<()>
+    pub fn report<L>(&mut self, lines: L, feed_blank: bool) -> std::io::Result<()>
     where
-        L: Iterator,
+        L: IntoIterator,
         L::Item: fmt::Display,
     {
+        let mut lines = lines.into_iter();
         if let Some(first) = lines.next() {
-            self.msg_last = true;
+            if self.feed_blank && !feed_blank {
+                writeln!(self.out)?;
+            }
+
+            self.feed_blank = feed_blank;
             writeln!(self.out, "--- {first}")?;
             lines.try_for_each(|e| writeln!(self.out, "    {e}"))?;
         }

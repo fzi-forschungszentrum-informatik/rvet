@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::BTreeMap;
-use std::io::Write;
+use std::io::{Write, stdout};
 use std::num::NonZeroU8;
 
 use anyhow::Context;
@@ -59,7 +59,7 @@ fn main() -> anyhow::Result<()> {
 
     let res = match args.command {
         cli::Command::Payloads { filter, trace } => {
-            let mut out = std::io::stdout().lock();
+            let mut out = stdout().lock();
             reader::Reader::new(trace.as_ref(), decoder)?
                 .with_handler(filter)
                 .try_for_each(|p| writeln!(out, "{}", p?).map_err(Into::into))
@@ -76,7 +76,7 @@ fn main() -> anyhow::Result<()> {
                 .build::<riscv_etrace::types::stack::NoStack, _>()
                 .context("Could not set up tracer")?;
 
-            let mut printer = pretty::Printer::new(std::io::stdout().lock(), &params);
+            let mut printer = pretty::Printer::new(stdout().lock(), &params);
             reader.try_for_each(|p| {
                 let payload = p?;
                 printer.report(show_payloads.then_some(&payload), false)?;
@@ -119,7 +119,7 @@ fn main() -> anyhow::Result<()> {
                     Box::new(move || Box::new(file.clone()) as Box<dyn Write + Send>)
                         as Box<dyn Fn() -> Box<dyn Write + Send>>
                 })
-                .unwrap_or(Box::new(|| Box::new(std::io::stdout())));
+                .unwrap_or(Box::new(|| Box::new(stdout())));
             let mut out = make_write();
             let fields: csv::Fields = fields.into();
             fields.write_header(&mut out)?;

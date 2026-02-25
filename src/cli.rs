@@ -97,6 +97,7 @@ pub enum Command {
         #[command(flatten)]
         program: binary::Args,
     },
+    /// Transform a trace from the E-Trace format into a CSV
     Csv {
         #[command(flatten)]
         dispatch: ThreadDispatch,

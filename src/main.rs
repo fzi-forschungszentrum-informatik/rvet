@@ -156,6 +156,18 @@ fn main() -> anyhow::Result<()> {
                 cli::PacketFormat::Smi => smi_stat(reader),
             }
         }
+        cli::Command::About => {
+            let bin_name = env!("CARGO_BIN_NAME");
+            let version = env!("CARGO_PKG_VERSION");
+            let description = env!("CARGO_PKG_DESCRIPTION");
+            let mut out = stdout().lock();
+            writeln!(out, "{bin_name} version {version}")?;
+            writeln!(out, "{description}")?;
+            writeln!(out, "Licensed under the Apache License, Version 2.0")?;
+            writeln!(out)?;
+            out.write_all(include_str!("../NOTICE").as_bytes())?;
+            anyhow::Ok(())
+        }
     };
 
     if res

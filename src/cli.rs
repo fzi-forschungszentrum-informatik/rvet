@@ -121,6 +121,8 @@ pub enum Command {
         /// Trace file
         trace: PathBuf,
     },
+    /// Show copyright and attribution
+    About,
 }
 
 /// Packet format

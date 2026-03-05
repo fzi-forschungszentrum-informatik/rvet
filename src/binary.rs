@@ -9,6 +9,8 @@ use riscv_etrace::binary;
 use riscv_etrace::instruction::bits::Bits;
 use riscv_isa::Target;
 
+use crate::symbols::AttachedSymbols;
+
 /// Type of binary produced by the builder
 pub type Binary = binary::boxed::Binary<'static, Instruction>;
 
@@ -204,10 +206,9 @@ impl Spec {
                 let offset = self.offset.with_context(|| {
                     format!("Need offset for (raw) binary '{}'", path.display())
                 })?;
-                let res = binary::basic::from_segment(data, target)
-                    .with_offset(offset)
-                    .boxer();
-                Ok(res)
+                let bin = binary::basic::from_segment(data, target);
+                let bin = AttachedSymbols::new(bin).with_offset(offset);
+                Ok(Arc::new(move || Box::new(bin.clone())))
             }
             Kind::Elf => {
                 let elf = elf::ElfBytes::<elf::endian::LittleEndian>::minimal_parse(data)
@@ -215,11 +216,14 @@ impl Spec {
                 let elf = std::sync::Arc::new(elf);
                 let res = binary::elf::Elf::<_, _, Target>::new(elf.clone())
                     .with_context(|| format!("Could not process ELF file '{}'", path.display(),))?;
+                let res = AttachedSymbols::new_elf(res)
+                    .with_context(|| format!("Could not process ELF file '{}'", path.display(),))?;
 
                 if let Some(offset) = self.offset {
-                    Ok(res.with_offset(offset).boxer())
+                    let bin = res.with_offset(offset);
+                    Ok(Arc::new(move || Box::new(bin.clone())))
                 } else if elf.ehdr.e_type != elf::abi::ET_DYN {
-                    Ok(res.boxer())
+                    Ok(Arc::new(move || Box::new(res.clone())))
                 } else {
                     Err(anyhow::anyhow!(
                         "Need offset for shared object '{}'",
@@ -276,9 +280,9 @@ impl Rom {
                         b"\x97\x02\x00\x00\x93\x85\x02\x02\x73\x25\x40\xf1\x83\xb2\x82\x01\x82\x82"
                     }
                 };
-                binary::from_segment(code, target)
-                    .with_offset(0x1000)
-                    .boxer()
+                let bin = binary::from_segment(code, target);
+                let bin = AttachedSymbols::new(bin).with_offset(0x1000);
+                Arc::new(move || Box::new(bin.clone()))
             }
         }
     }

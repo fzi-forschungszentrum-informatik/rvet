@@ -63,7 +63,7 @@ impl<W: Write> Printer<W> {
                 let privilege = ctx.privilege;
                 write!(self.out, "{0:addr_width$}  Context: {privilege}-mode", "")?;
                 if self.show_context {
-                    write!(self.out, " ctx: {}", ctx.context)?;
+                    write!(self.out, ", ctx: {}", ctx.context)?;
                 }
                 writeln!(self.out)
             }

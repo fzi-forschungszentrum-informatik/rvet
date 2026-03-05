@@ -68,10 +68,10 @@ impl Specs {
         self,
         target: Target,
     ) -> anyhow::Result<impl Iterator<Item = anyhow::Result<Arc<dyn Fn() -> Binary>>>> {
-        /// `elf::ElfBytes`, and therefore `binary::elf::Elf`, depend on the
-        /// underlying data, which is external. We thus need to load the data
-        /// and keep it availible for the `Binary`'s lifetime. And since we need
-        /// to do so for ELFs anyway, we also do so for raw binaries.
+        // `elf::ElfBytes`, and therefore `binary::elf::Elf`, depend on the
+        // underlying data, which is external. We thus need to load the data and
+        // keep it availible for the `Binary`'s lifetime. And since we need to
+        // do so for ELFs anyway, we also do so for raw binaries.
         static DATA: std::sync::OnceLock<Vec<Vec<u8>>> = std::sync::OnceLock::new();
         let data = self
             .0

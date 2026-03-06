@@ -3,8 +3,10 @@
 //! Utilties for handling symbols
 
 use anyhow::Context;
-use riscv_etrace::binary::{self, Binary};
-use riscv_etrace::instruction::info::Info;
+use riscv_etrace::binary::{self, Binary, boxed};
+use riscv_etrace::instruction::{self, Instruction};
+
+use instruction::info::Info;
 
 /// A symbol covering a range of addresses
 #[derive(Copy, Clone, Debug)]
@@ -146,5 +148,64 @@ where
             .get_symbols(mapped)
             .map(move |s| Symbol { address: addr, ..s });
         Box::new(res)
+    }
+}
+
+/// Wrapper encapsulating a [`Binary`] with symbols
+#[derive(Clone, Debug)]
+pub struct AttachedSymbols<B> {
+    inner: boxed::BoxedError<B>,
+    symbols: std::sync::Arc<[Symbol]>,
+}
+
+impl<B> AttachedSymbols<B> {
+    /// Create a wrapper for the given [`Binary`]
+    pub fn new(binary: B) -> Self {
+        Self {
+            inner: boxed::BoxedError::new(binary),
+            symbols: Default::default(),
+        }
+    }
+
+    /// Attach symbols to the [`Binary`]
+    pub fn with_symbols(self, mut symbols: Vec<Symbol>) -> Self {
+        symbols.sort_unstable_by_key(Symbol::address);
+        Self {
+            symbols: symbols.into(),
+            ..self
+        }
+    }
+}
+
+impl<B, I> Provider<I> for AttachedSymbols<B>
+where
+    Self: Binary<I>,
+    I: Info,
+{
+    fn get_symbols(&self, addr: u64) -> Box<dyn Iterator<Item = Symbol> + '_> {
+        let start = self.symbols.partition_point(|s| s.address() < addr);
+        let syms = self
+            .symbols
+            .split_at_checked(start)
+            .map(|(_, s)| s)
+            .unwrap_or_default();
+        let res = syms
+            .iter()
+            .copied()
+            .take_while(move |s| s.address() == addr);
+        Box::new(res)
+    }
+}
+
+impl<B, I> Binary<I> for AttachedSymbols<B>
+where
+    B: Binary<I>,
+    B::Error: binary::error::MaybeMissError + 'static,
+    I: Info,
+{
+    type Error = <boxed::BoxedError<B> as Binary<I>>::Error;
+
+    fn get_insn(&mut self, addr: u64) -> Result<Instruction<I>, Self::Error> {
+        self.inner.get_insn(addr)
     }
 }

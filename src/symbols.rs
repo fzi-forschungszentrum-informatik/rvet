@@ -3,6 +3,8 @@
 //! Utilties for handling symbols
 
 use anyhow::Context;
+use riscv_etrace::binary::Binary;
+use riscv_etrace::instruction::info::Info;
 
 /// A symbol covering a range of addresses
 #[derive(Copy, Clone, Debug)]
@@ -96,4 +98,13 @@ impl Symbol {
             abi::STT_FUNC | abi::STT_GNU_IFUNC | abi::STT_NOTYPE
         )
     }
+}
+
+/// Provider for symbols
+pub trait Provider<I: Info>: Binary<I> {
+    /// Retrieve [`Symbol`]s with the given (start) address
+    ///
+    /// Returns an [`Iterator`] over [`Symbol`]s with the given start address.
+    /// If no symbols can be found, the returned [`Iterator`] will be empty.
+    fn get_symbols(&self, addr: u64) -> Box<dyn Iterator<Item = Symbol> + '_>;
 }

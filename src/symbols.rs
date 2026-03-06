@@ -3,7 +3,7 @@
 //! Utilties for handling symbols
 
 use anyhow::Context;
-use riscv_etrace::binary::Binary;
+use riscv_etrace::binary::{self, Binary};
 use riscv_etrace::instruction::info::Info;
 
 /// A symbol covering a range of addresses
@@ -107,4 +107,22 @@ pub trait Provider<I: Info>: Binary<I> {
     /// Returns an [`Iterator`] over [`Symbol`]s with the given start address.
     /// If no symbols can be found, the returned [`Iterator`] will be empty.
     fn get_symbols(&self, addr: u64) -> Box<dyn Iterator<Item = Symbol> + '_>;
+}
+
+impl<B, I> Provider<I> for binary::Offset<B>
+where
+    B: Provider<I>,
+    B::Error: binary::error::Miss,
+    I: Info,
+{
+    fn get_symbols(&self, addr: u64) -> Box<dyn Iterator<Item = Symbol> + '_> {
+        let Some(mapped) = addr.checked_sub(self.offset()) else {
+            return Box::new(std::iter::empty());
+        };
+        let res = self
+            .inner()
+            .get_symbols(mapped)
+            .map(move |s| Symbol { address: addr, ..s });
+        Box::new(res)
+    }
 }

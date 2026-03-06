@@ -9,10 +9,11 @@ use riscv_etrace::binary;
 use riscv_etrace::instruction::bits::Bits;
 use riscv_isa::Target;
 
-use crate::symbols::AttachedSymbols;
+use crate::symbols::{self, AttachedSymbols};
 
 /// Type of binary produced by the builder
-pub type Binary = binary::boxed::Binary<'static, Instruction>;
+pub type Binary =
+    Box<dyn symbols::Provider<Instruction, Error = binary::boxed::Error> + Send + Sync + 'static>;
 
 /// Type of instruction info produced by binaries produced by the builder
 pub type Instruction = (

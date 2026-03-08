@@ -89,7 +89,7 @@ fn main() -> anyhow::Result<()> {
                     return tracer.is_recovering().then_some(()).ok_or(err);
                 }
 
-                if let Err(err) = process_items(&mut tracer, |i, _| printer.process_item(i)) {
+                if let Err(err) = process_items(&mut tracer, |i, b| printer.process_item(i, b)) {
                     printer.report(err.chain(), true)?;
                     return tracer.is_recovering().then_some(()).ok_or(err);
                 }

@@ -8,7 +8,7 @@ use std::num::NonZeroU8;
 use anyhow::Context;
 use cli_table::{Cell, Table};
 use riscv_etrace::instruction::decode::MakeDecode;
-use riscv_etrace::{packet, tracer};
+use riscv_etrace::{packet, tracer, types};
 
 mod binary;
 mod cli;
@@ -89,11 +89,7 @@ fn main() -> anyhow::Result<()> {
                     return tracer.is_recovering().then_some(()).ok_or(err);
                 }
 
-                let res = tracer.by_ref().try_for_each(|i| {
-                    let item = i.context("Error during trace")?;
-                    printer.process_item(item).map_err(anyhow::Error::from)
-                });
-                if let Err(err) = res {
+                if let Err(err) = process_items(&mut tracer, |i, _| printer.process_item(i)) {
                     printer.report(err.chain(), true)?;
                     return tracer.is_recovering().then_some(()).ok_or(err);
                 }
@@ -186,6 +182,24 @@ fn main() -> anyhow::Result<()> {
     }
 
     res
+}
+
+/// Process all items produced by this trcer
+fn process_items<B, F, E>(
+    tracer: &mut tracer::Tracer<B, types::stack::NoStack, binary::Instruction>,
+    mut func: F,
+) -> anyhow::Result<()>
+where
+    B: symbols::Provider<binary::Instruction>,
+    B::Error: std::error::Error + Send + Sync + 'static,
+    F: FnMut(tracer::item::Item<binary::Instruction>, &B) -> Result<(), E>,
+    anyhow::Error: From<E>,
+{
+    while let Some(item) = tracer.next() {
+        let item = item.context("Error during trace")?;
+        func(item, tracer.binary())?;
+    }
+    Ok(())
 }
 
 /// Collect join handlers and handle anny errors

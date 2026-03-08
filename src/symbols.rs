@@ -109,6 +109,16 @@ pub trait Provider<I: Info>: Binary<I> {
     fn get_symbols(&self, addr: u64) -> Box<dyn Iterator<Item = Symbol> + '_>;
 }
 
+impl<B, I> Provider<I> for Box<B>
+where
+    B: Provider<I> + ?Sized,
+    I: Info,
+{
+    fn get_symbols(&self, addr: u64) -> Box<dyn Iterator<Item = Symbol> + '_> {
+        B::get_symbols(self.as_ref(), addr)
+    }
+}
+
 impl<C, B, I> Provider<I> for binary::Multi<C, B>
 where
     C: std::borrow::BorrowMut<[B]>,

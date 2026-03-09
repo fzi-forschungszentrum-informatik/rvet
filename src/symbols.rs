@@ -177,6 +177,28 @@ impl<B> AttachedSymbols<B> {
     }
 }
 
+impl<E, P, D> AttachedSymbols<binary::elf::Elf<'static, E, P, D>>
+where
+    E: std::borrow::Borrow<elf::ElfBytes<'static, P>>,
+    P: elf::endian::EndianParse,
+    D: instruction::decode::MakeDecode,
+{
+    pub fn new_elf(binary: binary::elf::Elf<'static, E, P, D>) -> anyhow::Result<Self> {
+        let elf = binary.inner();
+        let syms = elf
+            .symbol_table()
+            .context("Could not read symbols from ELF")?
+            .map(|(syms, strings)| {
+                syms.into_iter()
+                    .flat_map(|s| Symbol::new(s, elf, &strings).transpose())
+                    .collect()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        Ok(Self::new(binary).with_symbols(syms))
+    }
+}
+
 impl<B, I> Provider<I> for AttachedSymbols<B>
 where
     Self: Binary<I>,

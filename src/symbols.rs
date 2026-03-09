@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Utilties for handling symbols
 
+use anyhow::Context;
+
 /// A symbol covering a range of addresses
 #[derive(Copy, Clone, Debug)]
 pub struct Symbol {
@@ -15,6 +17,43 @@ pub struct Symbol {
 
 #[allow(unused)]
 impl Symbol {
+    /// Create a new symbol from an [`elf::symbol::Symbol`]
+    pub fn new(
+        symbol: elf::symbol::Symbol,
+        elf: &elf::ElfBytes<'static, impl elf::endian::EndianParse>,
+        strings: &elf::string_table::StringTable<'static>,
+    ) -> anyhow::Result<Option<Self>> {
+        let address = match symbol.st_shndx {
+            elf::abi::SHN_ABS => symbol.st_value,
+            elf::abi::SHN_LORESERVE..=elf::abi::SHN_HIRESERVE => return Ok(None),
+            _ if elf.ehdr.e_type != elf::abi::ET_REL => symbol.st_value,
+            shndx => elf
+                .section_headers()
+                .context("Could not access section header table")?
+                .get(shndx.into())
+                .context("Could not access header of section {shndx}")?
+                .sh_addr
+                .checked_add(symbol.st_value)
+                .context("Invalid address")?,
+        };
+
+        let name = symbol
+            .st_name
+            .try_into()
+            .context("Could not retrieve name for symbol")?;
+        let name = strings
+            .get(name)
+            .context("Could not retrieve name for symbol")?;
+        Ok(Some(Self {
+            name,
+            symtype: symbol.st_symtype(),
+            bind: symbol.st_bind(),
+            visibility: symbol.st_vis(),
+            address,
+            size: symbol.st_size,
+        }))
+    }
+
     /// Retrieve the symbol's name
     pub fn name(&self) -> &'static str {
         self.name

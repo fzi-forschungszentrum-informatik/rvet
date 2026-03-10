@@ -83,4 +83,17 @@ impl Symbol {
     pub fn size(&self) -> u64 {
         self.size
     }
+
+    /// Check whether this symbol potentially refers to code objects
+    ///
+    /// Returns `true` if the symbol's type indicates a function or no type. The
+    /// latter covers labels.
+    pub fn is_code(&self) -> bool {
+        use elf::abi;
+
+        matches!(
+            self.symtype(),
+            abi::STT_FUNC | abi::STT_GNU_IFUNC | abi::STT_NOTYPE
+        )
+    }
 }

@@ -11,6 +11,8 @@ use riscv_etrace::instruction;
 use riscv_etrace::tracer::item::{self, Item};
 use riscv_etrace::types::Context;
 
+use crate::symbols;
+
 use instruction::bits::Bits;
 use instruction::info::Info;
 
@@ -19,6 +21,7 @@ pub struct Printer<W: Write> {
     out: W,
     context: Option<Context>,
     address_width: NonZeroU8,
+    insn_width: NonZeroU8,
     show_context: bool,
     feed_blank: bool,
 }
@@ -30,15 +33,17 @@ impl<W: Write> Printer<W> {
             out,
             context: Default::default(),
             address_width: params.iaddress_width_p.div_ceil(NonZeroU8::new(4).unwrap()),
+            insn_width: NonZeroU8::new(32).unwrap(),
             show_context: !params.nocontext_p,
             feed_blank: false,
         }
     }
 
     /// Process a single tracing [`Item`]
-    pub fn process_item(
+    pub fn process_item<I: Info + fmt::Display>(
         &mut self,
-        item: Item<(impl Info + fmt::Display, Bits)>,
+        item: Item<(I, Bits)>,
+        symbols: &impl symbols::Provider<(I, Bits)>,
     ) -> std::io::Result<()> {
         let pc = item.pc();
         let addr_width = self.address_width.get().into();
@@ -51,11 +56,23 @@ impl<W: Write> Printer<W> {
         match item.kind() {
             item::Kind::Regular(insn) => {
                 let (insn, bits) = &insn.info;
-                writeln!(
+                let insn_width = self.insn_width.get().into();
+                write!(
                     self.out,
-                    "{pc:addr_width$x}  {:<8}  {insn}",
-                    bits.to_string()
-                )
+                    "{pc:addr_width$x}  {:<8}  {:<insn_width$}",
+                    bits.to_string(),
+                    insn.to_string()
+                )?;
+                let mut symbols = symbols
+                    .get_symbols(pc)
+                    .filter(|s| s.is_code())
+                    .map(|s| s.name())
+                    .filter(|n| !n.is_empty() && !n.starts_with("$"));
+                if let Some(sym) = symbols.next() {
+                    write!(self.out, "  {sym}")?;
+                    symbols.try_for_each(|s| write!(self.out, ", {s}"))?;
+                }
+                writeln!(self.out)
             }
             item::Kind::Trap(info) => writeln!(self.out, "{pc:addr_width$x}  {info}"),
             item::Kind::Context(ctx) if self.context.as_ref() != Some(ctx) => {

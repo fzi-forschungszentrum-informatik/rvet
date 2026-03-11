@@ -16,6 +16,7 @@ mod csv;
 mod pretty;
 mod reader;
 mod stat;
+mod symbols;
 mod util;
 
 fn main() -> anyhow::Result<()> {

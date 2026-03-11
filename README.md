@@ -59,6 +59,16 @@ their specification names) at the root. For example:
 
 This program is licensed under the [Apache License 2.0](./LICENSE).
 
+## Acknowledgment
+
+<img src="./doc/BMFTR_sponsored.jpg" alt="sponsored by BMFTR" height="150" align="left">
+<img src="./doc/CHIPS-JU.png" alt="Chips Joint Undertaking" height="75">
+<img src="./doc/EU-partnership.png" alt="European Partnership" height="75">
+
+Development of this program was partially funded by the German Federal Ministry
+of Research, Technology, and Space (BMFTR) within the ChipsJU project RIGOLETTO
+(project number 101194371, grant number 16MEE0547).
+
 [etrace]: <https://github.com/riscv-non-isa/riscv-trace-spec/>
 [encap]: <https://github.com/riscv-non-isa/e-trace-encap/>
 [rv_tracer]: <https://github.com/pulp-platform/rv_tracer>

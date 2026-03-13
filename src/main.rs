@@ -97,7 +97,7 @@ fn main() -> anyhow::Result<()> {
                     match i.kind() {
                         tracer::item::Kind::Regular(insn) => {
                             let syms = b.get_symbols(pc).filter(|s| s.is_code());
-                            printer.process_insn(pc, insn, syms)
+                            printer.process_insn(pc, insn, 0, false, syms)
                         }
                         tracer::item::Kind::Trap(info) => printer.process_trap(pc, info),
                         tracer::item::Kind::Context(ctx) => printer.process_ctx(ctx),

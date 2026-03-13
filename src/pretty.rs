@@ -43,6 +43,8 @@ impl<W: Write> Printer<W> {
         &mut self,
         pc: u64,
         insn: &instruction::Instruction<(I, Bits)>,
+        stack_depth: usize,
+        at_fn_entry: bool,
         symbols: impl Iterator<Item = Symbol>,
     ) -> std::io::Result<()> {
         self.feed_blank()?;
@@ -56,9 +58,21 @@ impl<W: Write> Printer<W> {
             bits.to_string(),
             insn.to_string()
         )?;
+
+        if stack_depth >= 1 {
+            let stack_sym = if at_fn_entry {
+                '>'
+            } else if insn.is_return() {
+                '<'
+            } else {
+                '|'
+            };
+            write!(self.out, "{stack_sym:|>stack_depth$}")?;
+        }
+
         let mut symbols = symbols.map(|s| s.name()).filter(|n| !n.is_empty());
         if let Some(sym) = symbols.next() {
-            write!(self.out, "  {sym}")?;
+            write!(self.out, " {sym}")?;
             symbols.try_for_each(|s| write!(self.out, ", {s}"))?;
         }
         writeln!(self.out)

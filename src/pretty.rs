@@ -67,7 +67,7 @@ impl<W: Write> Printer<W> {
                     .get_symbols(pc)
                     .filter(|s| s.is_code())
                     .map(|s| s.name())
-                    .filter(|n| !n.is_empty() && !n.starts_with("$"));
+                    .filter(|n| !n.is_empty());
                 if let Some(sym) = symbols.next() {
                     write!(self.out, "  {sym}")?;
                     symbols.try_for_each(|s| write!(self.out, ", {s}"))?;

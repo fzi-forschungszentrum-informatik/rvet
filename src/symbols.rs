@@ -91,14 +91,16 @@ impl Symbol {
     /// Check whether this symbol potentially refers to code objects
     ///
     /// Returns `true` if the symbol's type indicates a function or no type. The
-    /// latter covers labels.
+    /// latter covers labels and is only considered if the name does not start
+    /// with a `$`.
     pub fn is_code(&self) -> bool {
         use elf::abi;
 
-        matches!(
-            self.symtype(),
-            abi::STT_FUNC | abi::STT_GNU_IFUNC | abi::STT_NOTYPE
-        )
+        match self.symtype() {
+            abi::STT_FUNC | abi::STT_GNU_IFUNC => true,
+            abi::STT_NOTYPE => !self.name().starts_with("$"),
+            _ => false,
+        }
     }
 }
 

@@ -48,10 +48,7 @@ impl<W: Write> Printer<W> {
         let pc = item.pc();
         let addr_width = self.address_width.get().into();
 
-        if self.feed_blank {
-            self.feed_blank = false;
-            writeln!(self.out)?;
-        }
+        self.feed_blank()?;
 
         match item.kind() {
             item::Kind::Regular(insn) => {
@@ -105,5 +102,15 @@ impl<W: Write> Printer<W> {
             lines.try_for_each(|e| writeln!(self.out, "    {e}"))?;
         }
         Ok(())
+    }
+
+    /// Feed a blank line if pre-scheduled
+    fn feed_blank(&mut self) -> std::io::Result<()> {
+        if self.feed_blank {
+            self.feed_blank = false;
+            writeln!(self.out)
+        } else {
+            Ok(())
+        }
     }
 }

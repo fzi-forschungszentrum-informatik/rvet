@@ -8,7 +8,6 @@ use std::num::NonZeroU8;
 
 use riscv_etrace::config::Parameters;
 use riscv_etrace::instruction;
-use riscv_etrace::tracer::item::{self, Item};
 use riscv_etrace::types::{Context, trap};
 
 use crate::symbols::Symbol;
@@ -36,20 +35,6 @@ impl<W: Write> Printer<W> {
             insn_width: NonZeroU8::new(32).unwrap(),
             show_context: !params.nocontext_p,
             feed_blank: false,
-        }
-    }
-
-    /// Process a single tracing [`Item`]
-    pub fn process_item<I: Info + fmt::Display>(
-        &mut self,
-        item: Item<(I, Bits)>,
-        symbols: impl Iterator<Item = Symbol>,
-    ) -> std::io::Result<()> {
-        let pc = item.pc();
-        match item.kind() {
-            item::Kind::Regular(insn) => self.process_insn(pc, insn, symbols),
-            item::Kind::Trap(info) => self.process_trap(pc, info),
-            item::Kind::Context(ctx) => self.process_ctx(ctx),
         }
     }
 

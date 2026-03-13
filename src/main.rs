@@ -92,8 +92,15 @@ fn main() -> anyhow::Result<()> {
                 }
 
                 let res = process_items(&mut tracer, |i, b| {
-                    let syms = b.get_symbols(i.pc()).filter(|s| s.is_code());
-                    printer.process_item(i, syms)
+                    let pc = i.pc();
+                    match i.kind() {
+                        tracer::item::Kind::Regular(insn) => {
+                            let syms = b.get_symbols(pc).filter(|s| s.is_code());
+                            printer.process_insn(pc, insn, syms)
+                        }
+                        tracer::item::Kind::Trap(info) => printer.process_trap(pc, info),
+                        tracer::item::Kind::Context(ctx) => printer.process_ctx(ctx),
+                    }
                 });
                 if let Err(err) = res {
                     printer.report(err.chain(), true)?;

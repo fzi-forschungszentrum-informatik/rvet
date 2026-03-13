@@ -9,7 +9,7 @@ use std::num::NonZeroU8;
 use riscv_etrace::config::Parameters;
 use riscv_etrace::instruction;
 use riscv_etrace::tracer::item::{self, Item};
-use riscv_etrace::types::Context;
+use riscv_etrace::types::{Context, trap};
 
 use crate::symbols;
 
@@ -46,43 +46,67 @@ impl<W: Write> Printer<W> {
         symbols: &impl symbols::Provider<(I, Bits)>,
     ) -> std::io::Result<()> {
         let pc = item.pc();
+        match item.kind() {
+            item::Kind::Regular(insn) => self.process_insn(pc, insn, symbols),
+            item::Kind::Trap(info) => self.process_trap(pc, info),
+            item::Kind::Context(ctx) => self.process_ctx(ctx),
+        }
+    }
+
+    /// Process a single regular tracing item
+    pub fn process_insn<I: Info + fmt::Display>(
+        &mut self,
+        pc: u64,
+        insn: &instruction::Instruction<(I, Bits)>,
+        symbols: &impl symbols::Provider<(I, Bits)>,
+    ) -> std::io::Result<()> {
+        self.feed_blank()?;
+
         let addr_width = self.address_width.get().into();
+        let (insn, bits) = &insn.info;
+        let insn_width = self.insn_width.get().into();
+        write!(
+            self.out,
+            "{pc:addr_width$x}  {:<8}  {:<insn_width$}",
+            bits.to_string(),
+            insn.to_string()
+        )?;
+        let mut symbols = symbols
+            .get_symbols(pc)
+            .filter(|s| s.is_code())
+            .map(|s| s.name())
+            .filter(|n| !n.is_empty());
+        if let Some(sym) = symbols.next() {
+            write!(self.out, "  {sym}")?;
+            symbols.try_for_each(|s| write!(self.out, ", {s}"))?;
+        }
+        writeln!(self.out)
+    }
+
+    /// Process a single trap tracing item
+    pub fn process_trap(&mut self, pc: u64, info: &trap::Info) -> std::io::Result<()> {
+        self.feed_blank()?;
+
+        let addr_width = self.address_width.get().into();
+        writeln!(self.out, "{pc:addr_width$x}  {info}")
+    }
+
+    /// Process a single context tracing item
+    pub fn process_ctx(&mut self, ctx: &Context) -> std::io::Result<()> {
+        if self.context.as_ref() == Some(ctx) {
+            return Ok(());
+        }
+        self.context = Some(*ctx);
 
         self.feed_blank()?;
 
-        match item.kind() {
-            item::Kind::Regular(insn) => {
-                let (insn, bits) = &insn.info;
-                let insn_width = self.insn_width.get().into();
-                write!(
-                    self.out,
-                    "{pc:addr_width$x}  {:<8}  {:<insn_width$}",
-                    bits.to_string(),
-                    insn.to_string()
-                )?;
-                let mut symbols = symbols
-                    .get_symbols(pc)
-                    .filter(|s| s.is_code())
-                    .map(|s| s.name())
-                    .filter(|n| !n.is_empty());
-                if let Some(sym) = symbols.next() {
-                    write!(self.out, "  {sym}")?;
-                    symbols.try_for_each(|s| write!(self.out, ", {s}"))?;
-                }
-                writeln!(self.out)
-            }
-            item::Kind::Trap(info) => writeln!(self.out, "{pc:addr_width$x}  {info}"),
-            item::Kind::Context(ctx) if self.context.as_ref() != Some(ctx) => {
-                self.context = Some(*ctx);
-                let privilege = ctx.privilege;
-                write!(self.out, "{0:addr_width$}  Context: {privilege}-mode", "")?;
-                if self.show_context {
-                    write!(self.out, ", ctx: {}", ctx.context)?;
-                }
-                writeln!(self.out)
-            }
-            _ => Ok(()),
+        let addr_width = self.address_width.get().into();
+        let privilege = ctx.privilege;
+        write!(self.out, "{:addr_width$}  Context: {privilege}-mode", "")?;
+        if self.show_context {
+            write!(self.out, ", ctx: {}", ctx.context)?;
         }
+        writeln!(self.out)
     }
 
     /// Report in a way that mixes well with the pretty output

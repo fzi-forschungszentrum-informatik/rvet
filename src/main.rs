@@ -11,15 +11,18 @@ mod stat;
 mod symbols;
 mod util;
 
-use std::collections::BTreeMap;
+use std::cell::RefCell;
+use std::collections::{BTreeMap, HashMap};
 use std::io::{Write, stdout};
 use std::num::NonZeroU8;
+use std::rc::Rc;
 
 use anyhow::Context;
 use cli_table::{Cell, Table};
-use riscv_etrace::instruction::decode::MakeDecode;
-use riscv_etrace::{packet, tracer, types};
+use riscv_etrace::{instruction, packet, tracer, types};
 
+use instruction::decode::MakeDecode;
+use instruction::info::Info;
 use symbols::Provider;
 
 fn main() -> anyhow::Result<()> {
@@ -81,6 +84,8 @@ fn main() -> anyhow::Result<()> {
                 .context("Could not set up tracer")?;
 
             let mut printer = pretty::Printer::new(stdout().lock(), &params);
+            let mut stacks: HashMap<types::Context, Rc<RefCell<stack::Stack>>> = Default::default();
+            let mut current_stack: Option<Rc<RefCell<stack::Stack>>> = None;
             reader.try_for_each(|p| {
                 let payload = p?;
                 printer.report(show_payloads.then_some(&payload), false)?;
@@ -96,11 +101,35 @@ fn main() -> anyhow::Result<()> {
                     let pc = i.pc();
                     match i.kind() {
                         tracer::item::Kind::Regular(insn) => {
+                            let Some(stack) = current_stack.as_ref().cloned() else {
+                                return Ok(());
+                            };
+                            let mut stack = stack.borrow_mut();
+
                             let syms = b.get_symbols(pc).filter(|s| s.is_code());
-                            printer.process_insn(pc, insn, 0, false, syms)
+                            let at_fn_entry = stack.at_fn_entry();
+                            if let Err(err) = stack.process_item(pc, insn) {
+                                if !matches!(err, stack::Error::NoFrame) {
+                                    printer.report(std::iter::once(err), false)?;
+                                }
+                                stack.reset();
+                            }
+                            if insn.is_return_from_trap() {
+                                stack.reset();
+                                current_stack = None;
+                            }
+                            printer.process_insn(pc, insn, stack.depth(), at_fn_entry, syms)
                         }
-                        tracer::item::Kind::Trap(info) => printer.process_trap(pc, info),
-                        tracer::item::Kind::Context(ctx) => printer.process_ctx(ctx),
+                        tracer::item::Kind::Trap(info) => {
+                            current_stack = None;
+                            printer.process_trap(pc, info)
+                        }
+                        tracer::item::Kind::Context(ctx) => {
+                            if current_stack.is_none() {
+                                current_stack = Some(stacks.entry(*ctx).or_default().clone());
+                            }
+                            printer.process_ctx(ctx)
+                        }
                     }
                 });
                 if let Err(err) = res {

@@ -11,7 +11,7 @@ use riscv_etrace::instruction;
 use riscv_etrace::tracer::item::{self, Item};
 use riscv_etrace::types::{Context, trap};
 
-use crate::symbols;
+use crate::symbols::Symbol;
 
 use instruction::bits::Bits;
 use instruction::info::Info;
@@ -43,7 +43,7 @@ impl<W: Write> Printer<W> {
     pub fn process_item<I: Info + fmt::Display>(
         &mut self,
         item: Item<(I, Bits)>,
-        symbols: &impl symbols::Provider<(I, Bits)>,
+        symbols: impl Iterator<Item = Symbol>,
     ) -> std::io::Result<()> {
         let pc = item.pc();
         match item.kind() {
@@ -58,7 +58,7 @@ impl<W: Write> Printer<W> {
         &mut self,
         pc: u64,
         insn: &instruction::Instruction<(I, Bits)>,
-        symbols: &impl symbols::Provider<(I, Bits)>,
+        symbols: impl Iterator<Item = Symbol>,
     ) -> std::io::Result<()> {
         self.feed_blank()?;
 
@@ -71,11 +71,7 @@ impl<W: Write> Printer<W> {
             bits.to_string(),
             insn.to_string()
         )?;
-        let mut symbols = symbols
-            .get_symbols(pc)
-            .filter(|s| s.is_code())
-            .map(|s| s.name())
-            .filter(|n| !n.is_empty());
+        let mut symbols = symbols.map(|s| s.name()).filter(|n| !n.is_empty());
         if let Some(sym) = symbols.next() {
             write!(self.out, "  {sym}")?;
             symbols.try_for_each(|s| write!(self.out, ", {s}"))?;

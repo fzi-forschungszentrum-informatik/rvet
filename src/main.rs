@@ -19,6 +19,8 @@ use cli_table::{Cell, Table};
 use riscv_etrace::instruction::decode::MakeDecode;
 use riscv_etrace::{packet, tracer, types};
 
+use symbols::Provider;
+
 fn main() -> anyhow::Result<()> {
     let args: cli::Cli = clap::Parser::parse();
 
@@ -89,7 +91,11 @@ fn main() -> anyhow::Result<()> {
                     return tracer.is_recovering().then_some(()).ok_or(err);
                 }
 
-                if let Err(err) = process_items(&mut tracer, |i, b| printer.process_item(i, b)) {
+                let res = process_items(&mut tracer, |i, b| {
+                    let syms = b.get_symbols(i.pc()).filter(|s| s.is_code());
+                    printer.process_item(i, syms)
+                });
+                if let Err(err) = res {
                     printer.report(err.chain(), true)?;
                     return tracer.is_recovering().then_some(()).ok_or(err);
                 }

@@ -20,6 +20,8 @@ use cli_table::{Cell, Table};
 use riscv_etrace::instruction::decode::MakeDecode;
 use riscv_etrace::{packet, tracer, types};
 
+use symbols::Provider;
+
 fn main() -> anyhow::Result<()> {
     let args: cli::Cli = clap::Parser::parse();
 
@@ -90,7 +92,18 @@ fn main() -> anyhow::Result<()> {
                     return tracer.is_recovering().then_some(()).ok_or(err);
                 }
 
-                if let Err(err) = process_items(&mut tracer, |i, b| printer.process_item(i, b)) {
+                let res = process_items(&mut tracer, |i, b| {
+                    let pc = i.pc();
+                    match i.kind() {
+                        tracer::item::Kind::Regular(insn) => {
+                            let syms = b.get_symbols(pc).filter(|s| s.is_code());
+                            printer.process_insn(pc, insn, syms)
+                        }
+                        tracer::item::Kind::Trap(info) => printer.process_trap(pc, info),
+                        tracer::item::Kind::Context(ctx) => printer.process_ctx(ctx),
+                    }
+                });
+                if let Err(err) = res {
                     printer.report(err.chain(), true)?;
                     return tracer.is_recovering().then_some(()).ok_or(err);
                 }

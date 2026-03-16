@@ -6,6 +6,7 @@ mod cli;
 mod csv;
 mod pretty;
 mod reader;
+mod stack;
 mod stat;
 mod symbols;
 mod util;

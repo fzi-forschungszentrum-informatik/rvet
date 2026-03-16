@@ -1,15 +1,6 @@
 // Copyright (c) 2026 FZI Forschungszentrum Informatik
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::BTreeMap;
-use std::io::{Write, stdout};
-use std::num::NonZeroU8;
-
-use anyhow::Context;
-use cli_table::{Cell, Table};
-use riscv_etrace::instruction::decode::MakeDecode;
-use riscv_etrace::{packet, tracer, types};
-
 mod binary;
 mod cli;
 mod csv;
@@ -18,6 +9,15 @@ mod reader;
 mod stat;
 mod symbols;
 mod util;
+
+use std::collections::BTreeMap;
+use std::io::{Write, stdout};
+use std::num::NonZeroU8;
+
+use anyhow::Context;
+use cli_table::{Cell, Table};
+use riscv_etrace::instruction::decode::MakeDecode;
+use riscv_etrace::{packet, tracer, types};
 
 fn main() -> anyhow::Result<()> {
     let args: cli::Cli = clap::Parser::parse();

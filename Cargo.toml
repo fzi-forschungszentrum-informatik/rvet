@@ -5,6 +5,9 @@ authors = ["Julian Ganz <ganz@fzi.de>"]
 license = "Apache-2.0"
 version = "0.1.0"
 edition = "2024"
+keywords = ["riscv", "tracing"]
+categories = ["command-line-utilities"]
+repository = "https://github.com/fzi-forschungszentrum-informatik/rvet"
 
 [dependencies]
 anyhow = "1.0"

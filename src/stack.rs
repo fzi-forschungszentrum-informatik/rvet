@@ -149,7 +149,7 @@ impl Frame {
     /// Retrieve the fn's entry address
     ///
     /// Returns the address the call jumped to.
-    pub fn fn_entry(&self) -> u64 {
+    pub fn entry(&self) -> u64 {
         self.entry
     }
 }

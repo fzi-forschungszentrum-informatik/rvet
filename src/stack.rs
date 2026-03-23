@@ -3,7 +3,6 @@
 //! Stack handling and reconstruction
 
 use std::fmt;
-use std::num::NonZeroU64;
 
 use riscv_etrace::instruction::{self, Instruction};
 
@@ -29,7 +28,6 @@ impl Stack {
                     origin,
                     origin_size,
                     entry: pc,
-                    size: None,
                 };
                 self.frames.push(frame);
             }
@@ -135,7 +133,6 @@ pub struct Frame {
     origin: u64,
     origin_size: instruction::Size,
     entry: u64,
-    size: Option<NonZeroU64>,
 }
 
 impl Frame {
@@ -154,10 +151,5 @@ impl Frame {
     /// Returns the address the call jumped to.
     pub fn fn_entry(&self) -> u64 {
         self.entry
-    }
-
-    /// Retrieve the fns code size in bytes
-    pub fn fn_size(&self) -> Option<NonZeroU64> {
-        self.size
     }
 }

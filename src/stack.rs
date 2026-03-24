@@ -3,6 +3,7 @@
 //! Stack handling and reconstruction
 
 use std::fmt;
+use std::sync::Arc;
 
 use riscv_etrace::instruction::{self, Instruction};
 
@@ -25,9 +26,12 @@ impl Stack {
                 origin_size,
             } => {
                 let frame = Frame {
-                    origin,
-                    origin_size,
                     entry: pc,
+                    kind: Kind::FnCall {
+                        origin,
+                        origin_size,
+                        ctx: Default::default(),
+                    },
                 };
                 self.frames.push(frame);
             }
@@ -36,8 +40,9 @@ impl Stack {
                     return Err(Error::NoFrame);
                 };
 
-                let expected = frame.return_addr();
-                if expected != pc {
+                if let Some(expected) = frame.return_addr()
+                    && expected != pc
+                {
                     return Err(Error::OriginMismatch { have: pc, expected });
                 }
             }
@@ -128,22 +133,31 @@ impl fmt::Display for Error {
 }
 
 /// A single stack frame
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Default, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Frame {
-    origin: u64,
-    origin_size: instruction::Size,
     entry: u64,
+    kind: Kind,
 }
 
 impl Frame {
     /// Retrieve the address of the call
-    pub fn origin(&self) -> u64 {
-        self.origin
+    pub fn origin(&self) -> Option<u64> {
+        match &self.kind {
+            Kind::FnCall { origin, .. } => Some(*origin),
+            _ => None,
+        }
     }
 
     /// Retrieve the address this call returns to
-    pub fn return_addr(&self) -> u64 {
-        self.origin() + u64::from(self.origin_size)
+    pub fn return_addr(&self) -> Option<u64> {
+        match &self.kind {
+            Kind::FnCall {
+                origin,
+                origin_size,
+                ..
+            } => Some(origin + u64::from(*origin_size)),
+            _ => None,
+        }
     }
 
     /// Retrieve the fn's entry address
@@ -152,4 +166,21 @@ impl Frame {
     pub fn entry(&self) -> u64 {
         self.entry
     }
+}
+
+/// [`Frame`] kind
+#[derive(Clone, Default, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
+pub enum Kind {
+    /// Base/entry frame
+    #[default]
+    Base,
+    /// Function call
+    FnCall {
+        /// Address of the calling instruction
+        origin: u64,
+        /// Size of the calling instruction
+        origin_size: instruction::Size,
+        /// Context of this call
+        ctx: Arc<Frame>,
+    },
 }

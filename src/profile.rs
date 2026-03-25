@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use crate::stack::Frame;
+use crate::stack::{self, Frame};
 
 /// Profile
 ///
@@ -117,4 +117,58 @@ impl std::ops::SubAssign for Cost {
     fn sub_assign(&mut self, other: Cost) {
         self.ticks = self.ticks.saturating_sub(other.ticks);
     }
+}
+
+/// Accumulator for profiling data
+///
+/// This type holds the state for combining fragments of profiling data.
+#[derive(Clone, Debug)]
+pub struct Accumulator {
+    inner: Profile,
+    stack: Arc<Frame>,
+}
+
+impl Accumulator {
+    /// Create a new accumulator with the given starting point
+    pub fn new(inner: Profile, stack: Arc<Frame>) -> Self {
+        Self { inner, stack }
+    }
+
+    /// Absorb a new fragment into the accumulated profile
+    pub fn absorb(&mut self, prof: Profile, end: FragmentEnd) -> Result<(), stack::Error> {
+        prof.inner.into_iter().for_each(|(k, v)| {
+            self.inner
+                .as_map_mut()
+                .entry(k.rebase(self.stack.clone()))
+                .or_default()
+                .merge(&v);
+        });
+
+        match end {
+            FragmentEnd::Stack(stack) => {
+                self.stack = stack.rebase(self.stack.clone());
+                Ok(())
+            }
+            FragmentEnd::StepOut(start) => {
+                if let Some(expected) = self.stack.pop()?.return_addr()
+                    && expected != start
+                {
+                    return Err(stack::Error::OriginMismatch {
+                        have: start,
+                        expected,
+                    });
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Specifier of a [`Profile`] fragment's end condition
+#[derive(Clone, Debug)]
+pub enum FragmentEnd {
+    /// The execution for this fragment ended on this stack [`Frame`]
+    Stack(Arc<Frame>),
+    /// The fragment was ended by returning from the supposed base [`Frame`]
+    StepOut(u64),
 }

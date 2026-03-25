@@ -5,6 +5,7 @@ mod binary;
 mod cli;
 mod csv;
 mod pretty;
+mod profile;
 mod reader;
 mod stack;
 mod stat;

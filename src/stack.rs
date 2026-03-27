@@ -262,6 +262,29 @@ impl Frame {
         let caller = self.caller().ok_or(Error::NoFrame)?;
         Ok(std::mem::replace(self, caller.clone()))
     }
+
+    /// Rebase on a different base
+    pub fn rebase(self: &Arc<Self>, base: Arc<Self>) -> Arc<Self> {
+        match &self.kind {
+            Kind::Base => base,
+            Kind::FnCall {
+                origin,
+                origin_size,
+                ctx,
+            } => {
+                let kind = Kind::FnCall {
+                    origin: *origin,
+                    origin_size: *origin_size,
+                    ctx: ctx.rebase(base),
+                };
+                Self {
+                    entry: self.entry,
+                    kind,
+                }
+                .into()
+            }
+        }
+    }
 }
 
 /// [`Frame`] kind

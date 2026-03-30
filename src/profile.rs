@@ -32,6 +32,12 @@ impl Profile {
     }
 }
 
+impl From<Accumulator> for Profile {
+    fn from(acc: Accumulator) -> Self {
+        acc.inner
+    }
+}
+
 /// Metrics for a single stack [`Frame`]
 #[derive(Clone, Default, Debug)]
 pub struct Metrics {

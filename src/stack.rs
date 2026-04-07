@@ -140,6 +140,11 @@ pub struct Frame {
 }
 
 impl Frame {
+    /// Create a new frame
+    fn new(entry: u64, kind: Kind) -> Self {
+        Self { entry, kind }
+    }
+
     /// Retrieve the address of the call
     pub fn origin(&self) -> Option<u64> {
         match &self.kind {

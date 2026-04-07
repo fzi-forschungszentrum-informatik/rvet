@@ -11,6 +11,73 @@ use instruction::info::Info;
 
 /// Call stack with reconstruction state
 #[derive(Clone, Default, Debug)]
+pub struct State {
+    top: Arc<Frame>,
+    last: Step,
+}
+
+impl State {
+    /// Create a new reconstruction state
+    pub fn new(entry: u64) -> Self {
+        Self {
+            top: Frame::new(entry, Kind::Base).into(),
+            last: Default::default(),
+        }
+    }
+
+    /// Drive stack reconstruction with the given instruction retirement
+    pub fn process_item(&mut self, pc: u64, insn: &Instruction<impl Info>) -> Result<(), Error> {
+        let last = std::mem::replace(&mut self.last, Step::from_insn(pc, insn));
+        match last {
+            Step::Regular => (),
+            Step::Call {
+                origin,
+                origin_size,
+            } => {
+                let frame = Frame::new(
+                    pc,
+                    Kind::FnCall {
+                        origin,
+                        origin_size,
+                        ctx: self.top.clone(),
+                    },
+                );
+                self.top = frame.into();
+            }
+            Step::Return => {
+                if let Some(expected) = self.top.pop()?.return_addr()
+                    && expected != pc
+                {
+                    return Err(Error::OriginMismatch { have: pc, expected });
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Retrieve the current stack
+    pub fn stack(&self) -> &Arc<Frame> {
+        &self.top
+    }
+
+    /// Check whether the current state indicates a fn entry
+    ///
+    /// This fn will return true after a call but before the first instruction
+    /// in the called fn is processed via [`process_item`][Self::process_item].
+    pub fn at_fn_entry(&self) -> bool {
+        matches!(self.last, Step::Call { .. })
+    }
+}
+
+impl AsRef<Arc<Frame>> for State {
+    fn as_ref(&self) -> &Arc<Frame> {
+        self.stack()
+    }
+}
+
+/// Call stack with reconstruction state
+#[derive(Clone, Default, Debug)]
 pub struct Stack {
     frames: Vec<Frame>,
     last: Step,

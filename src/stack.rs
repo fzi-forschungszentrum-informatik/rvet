@@ -189,6 +189,12 @@ impl Frame {
     pub fn depth(&self) -> usize {
         std::iter::successors(self.caller(), |f| f.caller()).count()
     }
+
+    /// Remove the topmost frame from this stack
+    pub fn pop(self: &mut Arc<Self>) -> Result<Arc<Self>, Error> {
+        let caller = self.caller().ok_or(Error::NoFrame)?;
+        Ok(std::mem::replace(self, caller.clone()))
+    }
 }
 
 /// [`Frame`] kind

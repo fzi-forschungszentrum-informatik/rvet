@@ -171,6 +171,24 @@ impl Frame {
     pub fn entry(&self) -> u64 {
         self.entry
     }
+
+    /// Retrieve this frame's caller
+    pub fn caller(&self) -> Option<&Arc<Self>> {
+        match &self.kind {
+            Kind::FnCall { ctx, .. } => Some(ctx),
+            _ => None,
+        }
+    }
+
+    /// Create an [`Iterator`] over this frame's call stack
+    pub fn iter(self: &Arc<Self>) -> impl Iterator<Item = &Arc<Self>> + Clone {
+        std::iter::successors(Some(self), |f| f.caller())
+    }
+
+    /// Determine the depth of this frame's call stack
+    pub fn depth(&self) -> usize {
+        std::iter::successors(self.caller(), |f| f.caller()).count()
+    }
 }
 
 /// [`Frame`] kind

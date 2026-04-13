@@ -84,8 +84,8 @@ fn main() -> anyhow::Result<()> {
                 .context("Could not set up tracer")?;
 
             let mut printer = pretty::Printer::new(stdout().lock(), &params);
-            let mut stacks: HashMap<types::Context, Rc<RefCell<stack::Stack>>> = Default::default();
-            let mut current_stack: Option<Rc<RefCell<stack::Stack>>> = None;
+            let mut stacks: HashMap<types::Context, Rc<RefCell<stack::State>>> = Default::default();
+            let mut current_stack: Option<Rc<RefCell<stack::State>>> = None;
             reader.try_for_each(|p| {
                 let payload = p?;
                 printer.report(show_payloads.then_some(&payload), false)?;
@@ -112,13 +112,14 @@ fn main() -> anyhow::Result<()> {
                                 if !matches!(err, stack::Error::NoFrame) {
                                     printer.report(std::iter::once(err), false)?;
                                 }
-                                stack.reset();
+                                *stack = stack::State::new(pc);
                             }
                             if insn.is_return_from_trap() {
-                                stack.reset();
+                                *stack = stack::State::new(pc);
                                 current_stack = None;
                             }
-                            printer.process_insn(pc, insn, stack.depth(), at_fn_entry, syms)
+                            let depth = stack.stack().depth();
+                            printer.process_insn(pc, insn, depth, at_fn_entry, syms)
                         }
                         tracer::item::Kind::Trap(info) => {
                             current_stack = None;

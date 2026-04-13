@@ -3,7 +3,7 @@
 //! Stack handling and reconstruction
 
 use std::fmt;
-use std::num::NonZeroU64;
+use std::sync::Arc;
 
 use riscv_etrace::instruction::{self, Instruction};
 
@@ -11,51 +11,54 @@ use instruction::info::Info;
 
 /// Call stack with reconstruction state
 #[derive(Clone, Default, Debug)]
-pub struct Stack {
-    frames: Vec<Frame>,
+pub struct State {
+    top: Arc<Frame>,
     last: Step,
 }
 
-impl Stack {
+impl State {
+    /// Create a new reconstruction state
+    pub fn new(entry: u64) -> Self {
+        Self {
+            top: Frame::new(entry, Kind::Base).into(),
+            last: Default::default(),
+        }
+    }
+
     /// Drive stack reconstruction with the given instruction retirement
     pub fn process_item(&mut self, pc: u64, insn: &Instruction<impl Info>) -> Result<(), Error> {
-        match self.last {
+        let last = std::mem::replace(&mut self.last, Step::from_insn(pc, insn));
+        match last {
             Step::Regular => (),
             Step::Call {
                 origin,
                 origin_size,
             } => {
-                let frame = Frame {
-                    origin,
-                    origin_size,
-                    entry: pc,
-                    size: None,
-                };
-                self.frames.push(frame);
+                let frame = Frame::new(
+                    pc,
+                    Kind::FnCall {
+                        origin,
+                        origin_size,
+                        ctx: self.top.clone(),
+                    },
+                );
+                self.top = frame.into();
             }
             Step::Return => {
-                let Some(frame) = self.frames.pop() else {
-                    return Err(Error::NoFrame);
-                };
-
-                let expected = frame.return_addr();
-                if expected != pc {
+                if let Some(expected) = self.top.pop()?.return_addr()
+                    && expected != pc
+                {
                     return Err(Error::OriginMismatch { have: pc, expected });
                 }
             }
         }
 
-        self.last = Step::from_insn(pc, insn);
         Ok(())
     }
 
-    /// Retrieve the current stack depth
-    ///
-    /// Depth increases after the first instruction in a call is processed via
-    /// [`process_item`][Self::process_item] and decreases after a return is
-    /// processed.
-    pub fn depth(&self) -> usize {
-        self.frames.len()
+    /// Retrieve the current stack
+    pub fn stack(&self) -> &Arc<Frame> {
+        &self.top
     }
 
     /// Check whether the current state indicates a fn entry
@@ -65,16 +68,11 @@ impl Stack {
     pub fn at_fn_entry(&self) -> bool {
         matches!(self.last, Step::Call { .. })
     }
-
-    /// Reset this stack
-    pub fn reset(&mut self) {
-        *self = Default::default()
-    }
 }
 
-impl AsRef<[Frame]> for Stack {
-    fn as_ref(&self) -> &[Frame] {
-        self.frames.as_ref()
+impl AsRef<Arc<Frame>> for State {
+    fn as_ref(&self) -> &Arc<Frame> {
+        self.stack()
     }
 }
 
@@ -130,34 +128,106 @@ impl fmt::Display for Error {
 }
 
 /// A single stack frame
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Default, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Frame {
-    origin: u64,
-    origin_size: instruction::Size,
     entry: u64,
-    size: Option<NonZeroU64>,
+    kind: Kind,
 }
 
 impl Frame {
+    /// Create a new frame
+    fn new(entry: u64, kind: Kind) -> Self {
+        Self { entry, kind }
+    }
+
     /// Retrieve the address of the call
-    pub fn origin(&self) -> u64 {
-        self.origin
+    pub fn origin(&self) -> Option<u64> {
+        match &self.kind {
+            Kind::FnCall { origin, .. } => Some(*origin),
+            _ => None,
+        }
     }
 
     /// Retrieve the address this call returns to
-    pub fn return_addr(&self) -> u64 {
-        self.origin() + u64::from(self.origin_size)
+    pub fn return_addr(&self) -> Option<u64> {
+        match &self.kind {
+            Kind::FnCall {
+                origin,
+                origin_size,
+                ..
+            } => Some(origin + u64::from(*origin_size)),
+            _ => None,
+        }
     }
 
     /// Retrieve the fn's entry address
     ///
     /// Returns the address the call jumped to.
-    pub fn fn_entry(&self) -> u64 {
+    pub fn entry(&self) -> u64 {
         self.entry
     }
 
-    /// Retrieve the fns code size in bytes
-    pub fn fn_size(&self) -> Option<NonZeroU64> {
-        self.size
+    /// Retrieve this frame's caller
+    pub fn caller(&self) -> Option<&Arc<Self>> {
+        match &self.kind {
+            Kind::FnCall { ctx, .. } => Some(ctx),
+            _ => None,
+        }
     }
+
+    /// Create an [`Iterator`] over this frame's call stack
+    pub fn iter(self: &Arc<Self>) -> impl Iterator<Item = &Arc<Self>> + Clone {
+        std::iter::successors(Some(self), |f| f.caller())
+    }
+
+    /// Determine the depth of this frame's call stack
+    pub fn depth(&self) -> usize {
+        std::iter::successors(self.caller(), |f| f.caller()).count()
+    }
+
+    /// Remove the topmost frame from this stack
+    pub fn pop(self: &mut Arc<Self>) -> Result<Arc<Self>, Error> {
+        let caller = self.caller().ok_or(Error::NoFrame)?;
+        Ok(std::mem::replace(self, caller.clone()))
+    }
+
+    /// Rebase on a different base
+    pub fn rebase(self: &Arc<Self>, base: Arc<Self>) -> Arc<Self> {
+        match &self.kind {
+            Kind::Base => base,
+            Kind::FnCall {
+                origin,
+                origin_size,
+                ctx,
+            } => {
+                let kind = Kind::FnCall {
+                    origin: *origin,
+                    origin_size: *origin_size,
+                    ctx: ctx.rebase(base),
+                };
+                Self {
+                    entry: self.entry,
+                    kind,
+                }
+                .into()
+            }
+        }
+    }
+}
+
+/// [`Frame`] kind
+#[derive(Clone, Default, Debug, Hash, Eq, Ord, PartialEq, PartialOrd)]
+pub enum Kind {
+    /// Base/entry frame
+    #[default]
+    Base,
+    /// Function call
+    FnCall {
+        /// Address of the calling instruction
+        origin: u64,
+        /// Size of the calling instruction
+        origin_size: instruction::Size,
+        /// Context of this call
+        ctx: Arc<Frame>,
+    },
 }

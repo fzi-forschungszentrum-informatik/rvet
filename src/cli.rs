@@ -117,6 +117,22 @@ pub enum Command {
         #[arg(long, value_name("FIELD"))]
         fields: Vec<csv::Field>,
     },
+    /// Create a profile based on the trace
+    Prof {
+        #[command(flatten)]
+        dispatch: ThreadDispatch,
+
+        /// Trace file
+        trace: PathBuf,
+
+        /// Program binaries to trace
+        #[command(flatten)]
+        program: binary::Args,
+
+        /// Path of output file
+        #[arg(long, value_name("PATH"), value_parser = Output::value_parser())]
+        profile: Option<Output>,
+    },
     /// List number of packets for different sources, destinations and types
     Stat {
         /// Trace file

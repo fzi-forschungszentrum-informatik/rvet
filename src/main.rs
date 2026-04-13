@@ -13,7 +13,7 @@ mod symbols;
 mod util;
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, hash_map};
 use std::io::{Write, stdout};
 use std::num::NonZeroU8;
 use std::rc::Rc;
@@ -190,6 +190,98 @@ fn main() -> anyhow::Result<()> {
             let res = collect_threads(res);
             out.flush()?;
             res
+        }),
+        cli::Command::Prof {
+            dispatch,
+            trace,
+            program,
+            profile,
+        } => std::thread::scope(|scope| {
+            let reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(dispatch);
+            let output = profile.unwrap_or_else(|| todo!()).open()?;
+            let program = program.builder(target)?;
+
+            let (fragment_sink, fragments) = std::sync::mpsc::channel();
+            let res = reader.map(|r| {
+                let (_, receiver) = r?;
+                let mut tracer = tracer
+                    .with_binary(program.clone().build())
+                    .build::<riscv_etrace::types::stack::NoStack, _>()
+                    .context("Could not set up tracer")?;
+                let fragment = fragment_sink.clone();
+                anyhow::Ok(scope.spawn(move || {
+                    let mut profile = profile::Profile::default();
+                    let mut state = stack::State::new(0);
+                    let mut context = types::Context::default();
+                    receiver.into_iter().try_for_each(|p| {
+                        tracer
+                            .process_payload(&p)
+                            .context("Could not process payload")?;
+                        tracer.by_ref().try_for_each(|i| {
+                            let item = i.context("Error during trace")?;
+                            match item.kind() {
+                                tracer::item::Kind::Regular(insn) => {
+                                    let pc = item.pc();
+                                    if let Err(err) = state.process_item(pc, insn) {
+                                        if !matches!(err, stack::Error::NoFrame) {
+                                            return Err(err.into());
+                                        }
+                                        let current = (
+                                            context,
+                                            std::mem::take(&mut profile),
+                                            profile::FragmentEnd::StepOut(pc),
+                                        );
+                                        return fragment.send(current).map_err(|_| todo!());
+                                    }
+                                    profile
+                                        .as_map_mut()
+                                        .entry(state.stack().clone())
+                                        .or_default()
+                                        .tick(pc);
+                                    Ok(())
+                                }
+                                tracer::item::Kind::Context(ctx) => {
+                                    let current = (
+                                        context,
+                                        std::mem::take(&mut profile),
+                                        profile::FragmentEnd::Stack(state.stack().clone()),
+                                    );
+                                    state = stack::State::new(item.pc());
+                                    context = *ctx;
+                                    fragment.send(current).map_err(|_| todo!())
+                                }
+                                _ => Ok(()),
+                            }
+                        })
+                    })
+                }))
+            });
+
+            collect_threads(res)?;
+            drop(fragment_sink);
+
+            let mut profile: HashMap<_, profile::Accumulator> = Default::default();
+            fragments
+                .into_iter()
+                .try_for_each(|(c, p, t)| match profile.entry(c) {
+                    hash_map::Entry::Occupied(mut e) => e.get_mut().absorb(p, t),
+                    hash_map::Entry::Vacant(e) => {
+                        e.insert(profile::Accumulator::new(p, t.into()));
+                        Ok(())
+                    }
+                })
+                .context("Failed to collate fragments")?;
+
+            let mut writer = profile::callgrind::Writer::new(output, program.build());
+            writer.write_header()?;
+            profile.into_iter().try_for_each(|(c, a)| {
+                writer.write_profile(a.into()).with_context(|| {
+                    format!(
+                        "Could not write profile for context {}, priv {}",
+                        c.context, c.privilege,
+                    )
+                })
+            })
         }),
         cli::Command::Stat { trace } => {
             let reader = reader::Reader::new(trace.as_ref(), decoder)?;

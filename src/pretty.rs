@@ -15,7 +15,7 @@ use crate::symbols::Symbol;
 use instruction::bits::Bits;
 use instruction::info::Info;
 
-/// Pretty-printer for [`Item`]s
+/// Pretty-printer for tracing items and arbitrary messages
 pub struct Printer<W: Write> {
     out: W,
     context: Option<Context>,

@@ -178,3 +178,12 @@ pub enum FragmentEnd {
     /// The fragment was ended by returning from the supposed base [`Frame`]
     StepOut(u64),
 }
+
+impl From<FragmentEnd> for Arc<Frame> {
+    fn from(end: FragmentEnd) -> Self {
+        match end {
+            FragmentEnd::Stack(s) => s,
+            FragmentEnd::StepOut(a) => Frame::base(a).into(),
+        }
+    }
+}

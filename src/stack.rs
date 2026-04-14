@@ -140,6 +140,11 @@ impl Frame {
         Self { entry, kind }
     }
 
+    /// Create a new base frame
+    pub fn base(entry: u64) -> Self {
+        Self::new(entry, Kind::Base)
+    }
+
     /// Retrieve the address of the call
     pub fn origin(&self) -> Option<u64> {
         match &self.kind {

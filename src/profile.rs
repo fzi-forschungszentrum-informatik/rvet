@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Profile creation and handling utilities
 
+pub mod callgrind;
+
 use std::collections::BTreeMap;
 use std::sync::Arc;
 

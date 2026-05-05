@@ -180,6 +180,11 @@ impl Frame {
         }
     }
 
+    /// Retrieve the frame's [`Kind`]
+    pub fn kind(&self) -> &Kind {
+        &self.kind
+    }
+
     /// Create an [`Iterator`] over this frame's call stack
     pub fn iter(self: &Arc<Self>) -> impl Iterator<Item = &Arc<Self>> + Clone {
         std::iter::successors(Some(self), |f| f.caller())

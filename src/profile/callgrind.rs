@@ -29,6 +29,16 @@ impl<W: Write, P: Provider<I>, I: Info> Writer<W, P, I> {
         }
     }
 
+    /// Write a file header
+    pub fn write_header(&mut self) -> anyhow::Result<()> {
+        let mut write = || {
+            writeln!(self.inner, "# callgrind format")?;
+            writeln!(self.inner, "positions: instr")?;
+            writeln!(self.inner, "events: ticks")
+        };
+        write().context("Could not write header")
+    }
+
     /// Write a [`Profile`]
     pub fn write_profile(&mut self, profile: Profile) -> anyhow::Result<()> {
         // We start with a provile with `Metrics` ordered by stack depth,

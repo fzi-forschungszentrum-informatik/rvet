@@ -121,7 +121,7 @@ impl fmt::Display for Error {
             Self::NoFrame => write!(f, "Function return with no call site to return to"),
             Self::OriginMismatch { have, expected } => write!(
                 f,
-                "Mismtach of return address: have {have}, expected {expected}"
+                "Mismtach of return address: have {have:x}, expected {expected:x}"
             ),
         }
     }

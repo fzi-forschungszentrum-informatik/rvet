@@ -121,7 +121,7 @@ impl fmt::Display for Error {
             Self::NoFrame => write!(f, "Function return with no call site to return to"),
             Self::OriginMismatch { have, expected } => write!(
                 f,
-                "Mismtach of return address: have {have}, expected {expected}"
+                "Mismtach of return address: have {have:x}, expected {expected:x}"
             ),
         }
     }
@@ -138,6 +138,11 @@ impl Frame {
     /// Create a new frame
     fn new(entry: u64, kind: Kind) -> Self {
         Self { entry, kind }
+    }
+
+    /// Create a new base frame
+    pub fn base(entry: u64) -> Self {
+        Self::new(entry, Kind::Base)
     }
 
     /// Retrieve the address of the call
@@ -173,6 +178,11 @@ impl Frame {
             Kind::FnCall { ctx, .. } => Some(ctx),
             _ => None,
         }
+    }
+
+    /// Retrieve the frame's [`Kind`]
+    pub fn kind(&self) -> &Kind {
+        &self.kind
     }
 
     /// Create an [`Iterator`] over this frame's call stack

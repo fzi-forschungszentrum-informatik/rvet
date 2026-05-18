@@ -111,6 +111,24 @@ pub trait Provider<I: Info>: Binary<I> {
     /// Returns an [`Iterator`] over [`Symbol`]s with the given start address.
     /// If no symbols can be found, the returned [`Iterator`] will be empty.
     fn get_symbols(&self, addr: u64) -> Box<dyn Iterator<Item = Symbol> + '_>;
+
+    /// Create an appropriate printable symbol name for a given fn entry
+    fn fn_symbol(&self, addr: u64) -> std::borrow::Cow<'_, str> {
+        use elf::abi;
+
+        let mut current = None;
+        for sym in self.get_symbols(addr) {
+            if matches!(sym.symtype(), abi::STT_FUNC | abi::STT_GNU_IFUNC) {
+                return sym.name().into();
+            } else if current.is_none() && sym.is_code() {
+                current = Some(sym.name())
+            }
+        }
+
+        current
+            .map(Into::into)
+            .unwrap_or_else(|| format!("anon_fn@0x{addr:x}").into())
+    }
 }
 
 impl<B, I> Provider<I> for Box<B>

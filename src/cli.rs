@@ -63,6 +63,10 @@ pub struct Cli {
     #[arg(value_enum, short, long, global = true)]
     pub target: Option<Target>,
 
+    /// Default address mode
+    #[arg(long, default_value_t, global = true)]
+    pub address_mode: AddressMode,
+
     /// Always display output directly, do not use a pager
     #[cfg(feature = "pager")]
     #[arg(long = "no-pager", action = clap::ArgAction::SetFalse, global = true)]

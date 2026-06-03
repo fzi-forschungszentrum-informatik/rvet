@@ -63,7 +63,9 @@ fn main() -> anyhow::Result<()> {
         .with_timestamp_width(args.ts_width)
         .with_trace_type_width(args.trace_type_width)
         .for_unit(args.unit.into());
-    let tracer = tracer::builder().with_params(&params);
+    let tracer = tracer::builder()
+        .with_address_mode(args.address_mode.into())
+        .with_params(&params);
 
     let res = match args.command {
         cli::Command::Payloads { filter, trace } => {

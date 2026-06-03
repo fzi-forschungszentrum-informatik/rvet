@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use anyhow::Context;
 use clap::builder::TypedValueParser;
+use riscv_etrace::config;
 use riscv_etrace::packet::unit;
 
 use crate::binary;
@@ -195,6 +196,39 @@ impl From<Target> for riscv_isa::Target {
             Target::Rv32I => Self::rv32i_full(),
             Target::Rv64I => Self::rv64i_full(),
         }
+    }
+}
+
+/// Address mode representation
+#[derive(Copy, Clone, Default, Debug)]
+pub struct AddressMode(config::AddressMode);
+
+impl From<AddressMode> for config::AddressMode {
+    fn from(mode: AddressMode) -> Self {
+        mode.0
+    }
+}
+
+impl fmt::Display for AddressMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl clap::ValueEnum for AddressMode {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[
+            Self(config::AddressMode::Full),
+            Self(config::AddressMode::Delta),
+        ]
+    }
+
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        let desc = match self.0 {
+            config::AddressMode::Full => "Full address mode",
+            config::AddressMode::Delta => "Delta address mode",
+        };
+        Some(clap::builder::PossibleValue::new(self.0.to_string()).help(desc))
     }
 }
 

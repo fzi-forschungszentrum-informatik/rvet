@@ -11,6 +11,12 @@ is based on https://keepachangelog.com/en/1.1.0/.
   trace file.
 - The `clap` dependency was upgraded to version `4.6`.
 
+### Fixed
+
+- Instructions following a return from exception or interrupt are no longer
+  obscurred. This happened when the return was not coinciding with a privilege
+  (mode) change.
+
 ## 0.1.0 - 2026-03-19
 
 ### Added

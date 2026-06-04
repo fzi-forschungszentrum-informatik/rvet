@@ -102,9 +102,7 @@ fn main() -> anyhow::Result<()> {
                     let pc = i.pc();
                     match i.kind() {
                         tracer::item::Kind::Regular(insn) => {
-                            let Some(stack) = current_stack.as_ref().cloned() else {
-                                return Ok(());
-                            };
+                            let stack = current_stack.clone().unwrap_or_default();
                             let mut stack = stack.borrow_mut();
 
                             let syms = b.get_symbols(pc).filter(|s| s.is_code());
@@ -122,14 +120,9 @@ fn main() -> anyhow::Result<()> {
                             let depth = stack.stack().depth();
                             printer.process_insn(pc, insn, depth, at_fn_entry, syms)
                         }
-                        tracer::item::Kind::Trap(info) => {
-                            current_stack = None;
-                            printer.process_trap(pc, info)
-                        }
+                        tracer::item::Kind::Trap(info) => printer.process_trap(pc, info),
                         tracer::item::Kind::Context(ctx) => {
-                            if current_stack.is_none() {
-                                current_stack = Some(stacks.entry(*ctx).or_default().clone());
-                            }
+                            current_stack = Some(stacks.entry(*ctx).or_default().clone());
                             printer.process_ctx(ctx)
                         }
                     }

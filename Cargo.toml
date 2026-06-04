@@ -11,7 +11,7 @@ repository = "https://github.com/fzi-forschungszentrum-informatik/rvet"
 
 [dependencies]
 anyhow = "1.0"
-clap = { version = "4.6", features = ["derive"] }
+clap = { version = "4.6", features = ["derive", "string"] }
 cli-table = { version = "0.5", default-features = false, features = ["title"] }
 either = "1.16"
 elf = "0.8"

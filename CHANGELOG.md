@@ -9,6 +9,11 @@ is based on https://keepachangelog.com/en/1.1.0/.
 
 - `prof` subcommand for generating a profile in the callgrind format from a
   trace file.
+- `--address-mode` CLI option for selecting a default address mode, meant for
+  trace unit that do not communicate this setting via a support payload.
+
+### Changed
+
 - The `clap` dependency was upgraded to version `4.6`.
 - The `riscv-etrace` dependency was upgraded to version `0.10`.
 - The `either` dependency was upgraded to version `1.16`.

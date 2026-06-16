@@ -186,15 +186,10 @@ impl PacketHandler for SingleHart {
 }
 
 /// A [`PacketHandler`] dispatching to a separate threads for each source id
-#[derive(Clone, Debug, clap::Args)]
+#[derive(Clone, Debug)]
 pub struct ThreadDispatch {
-    #[arg(skip)]
     targets: HashMap<u64, mpsc::SyncSender<Payload>>,
-    #[command(flatten)]
     kind: TDKind,
-
-    /// Restrict processing to payloads from these sources
-    #[arg(long)]
     src_id: Vec<u64>,
 }
 
@@ -274,39 +269,6 @@ pub enum TDKind {
     Encap(u8),
     /// Decode Siemens Messaging Infrastructure (SMI) packets
     Smi,
-}
-
-impl clap::Args for TDKind {
-    fn augment_args(cmd: clap::Command) -> clap::Command {
-        Self::augment_args_for_update(cmd)
-    }
-
-    fn augment_args_for_update(cmd: clap::Command) -> clap::Command {
-        cmd.arg(clap::arg!(--"flow" <ID> "Process packets with this flow indicator"))
-    }
-}
-
-impl clap::FromArgMatches for TDKind {
-    fn from_arg_matches(matches: &clap::ArgMatches) -> Result<Self, clap::Error> {
-        use crate::cli::PacketFormat;
-
-        let format = matches.get_one("format").cloned().unwrap_or_default();
-        let mut res = match format {
-            PacketFormat::Encap => Self::Encap(0),
-            PacketFormat::Smi => Self::Smi,
-        };
-        res.update_from_arg_matches(matches)?;
-        Ok(res)
-    }
-
-    fn update_from_arg_matches(&mut self, matches: &clap::ArgMatches) -> Result<(), clap::Error> {
-        if let Self::Encap(flow) = self
-            && let Some(f) = matches.get_one("flow")
-        {
-            *flow = *f;
-        }
-        Ok(())
-    }
 }
 
 /// A dummy [`PacketHandler`]

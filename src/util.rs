@@ -6,6 +6,8 @@ use std::fs::File;
 use std::io::{self, Write};
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use riscv_etrace::packet::{encap, smi};
+
 /// A [`File`], encapsulated for exclusive writes
 ///
 /// This wrapper's [`Write::write_all`] is implemented to be thread-safe.
@@ -39,5 +41,35 @@ impl Write for LockingFile {
 
     fn flush(&mut self) -> io::Result<()> {
         self.lock()?.flush()
+    }
+}
+
+/// Packet selector
+pub trait Selector<P> {
+    /// Check whether the given packet matches this selector
+    fn matches(&self, packet: &P) -> bool;
+}
+
+impl<T> Selector<encap::Normal<T>> for u64 {
+    fn matches(&self, packet: &encap::Normal<T>) -> bool {
+        u64::from(packet.src_id()) == *self
+    }
+}
+
+impl<T> Selector<smi::Packet<T>> for u64 {
+    fn matches(&self, packet: &smi::Packet<T>) -> bool {
+        packet.hart() == *self
+    }
+}
+
+impl<T> Selector<encap::Normal<T>> for Vec<u64> {
+    fn matches(&self, packet: &encap::Normal<T>) -> bool {
+        self.is_empty() || self.contains(&packet.src_id().into())
+    }
+}
+
+impl<T> Selector<smi::Packet<T>> for Vec<u64> {
+    fn matches(&self, packet: &smi::Packet<T>) -> bool {
+        self.is_empty() || self.contains(&packet.hart())
     }
 }

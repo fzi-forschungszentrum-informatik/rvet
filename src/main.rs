@@ -68,10 +68,15 @@ fn main() -> anyhow::Result<()> {
         .with_params(&params);
 
     let res = match args.command {
-        cli::Command::Payloads { filter, trace } => {
+        cli::Command::Payloads {
+            filter,
+            src_id,
+            trace,
+        } => {
             let mut out = stdout().lock();
+            let handler = reader::SingleHart::new(args.format, filter, src_id);
             reader::Reader::new(trace.as_ref(), decoder)?
-                .with_handler(filter)
+                .with_handler(handler)
                 .try_for_each(|p| writeln!(out, "{}", p?).map_err(Into::into))
         }
         cli::Command::Trace {

@@ -82,7 +82,11 @@ pub enum Command {
     /// Dump the payloads emitted by a single source
     Payloads {
         #[command(flatten)]
-        filter: SingleHart,
+        filter: CommonSelector,
+
+        /// Process packets originating from this source
+        #[arg(long, default_value_t, value_name("ID"))]
+        src_id: u64,
 
         /// Trace file
         trace: PathBuf,

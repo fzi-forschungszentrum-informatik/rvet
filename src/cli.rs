@@ -114,7 +114,11 @@ pub enum Command {
     /// Transform a trace from the E-Trace format into a CSV
     Csv {
         #[command(flatten)]
-        dispatch: ThreadDispatch,
+        filter: CommonSelector,
+
+        /// Restrict processing to payloads from these sources
+        #[arg(long, value_name("ID"))]
+        src_id: Vec<u64>,
 
         /// Trace file
         trace: PathBuf,

@@ -148,13 +148,15 @@ fn main() -> anyhow::Result<()> {
             })
         }
         cli::Command::Csv {
-            dispatch,
+            filter,
+            src_id,
             trace,
             program,
             csv,
             fields,
         } => std::thread::scope(|scope| {
-            let reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(dispatch);
+            let handler = reader::ThreadDispatch::new(args.format, filter, src_id);
+            let reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(handler);
             let make_write = csv
                 .map(cli::Output::open)
                 .transpose()?

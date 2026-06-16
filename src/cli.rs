@@ -8,11 +8,12 @@ use std::path::PathBuf;
 use anyhow::Context;
 use clap::builder::TypedValueParser;
 use riscv_etrace::config;
-use riscv_etrace::packet::unit;
+use riscv_etrace::packet::{encap, smi, unit};
 
 use crate::binary;
 use crate::csv;
 use crate::reader::{SingleHart, ThreadDispatch};
+use crate::util::Selector;
 
 #[derive(clap::Parser)]
 #[command(version, about)]
@@ -155,6 +156,33 @@ pub enum PacketFormat {
     Encap,
     /// Siemens Messaging Infrastructure (SMI)
     Smi,
+}
+
+/// Packet [`Selector`] based on common items
+#[derive(Copy, Clone, Debug, clap::Args)]
+pub struct CommonSelector {
+    /// Retrieve the flow indicator this selector selects
+    #[arg(long, default_value_t, hide_default_value(true), value_name("NUM"))]
+    flow: u8,
+}
+
+impl CommonSelector {
+    /// Retrieve the sources this selector selects
+    pub fn flow(&self) -> u8 {
+        self.flow
+    }
+}
+
+impl<T> Selector<encap::Normal<T>> for CommonSelector {
+    fn matches(&self, packet: &encap::Normal<T>) -> bool {
+        packet.flow() == self.flow()
+    }
+}
+
+impl<T> Selector<smi::Packet<T>> for CommonSelector {
+    fn matches(&self, packet: &smi::Packet<T>) -> bool {
+        packet.trace_type().is_some()
+    }
 }
 
 /// Encoder unit (type) representation

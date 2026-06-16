@@ -12,7 +12,6 @@ use riscv_etrace::packet::{encap, smi, unit};
 
 use crate::binary;
 use crate::csv;
-use crate::reader::ThreadDispatch;
 use crate::util::Selector;
 
 #[derive(clap::Parser)]
@@ -138,7 +137,11 @@ pub enum Command {
     /// Create a profile based on the trace
     Prof {
         #[command(flatten)]
-        dispatch: ThreadDispatch,
+        filter: CommonSelector,
+
+        /// Restrict processing to payloads from these sources
+        #[arg(long, value_name("ID"))]
+        src_id: Vec<u64>,
 
         /// Trace file
         trace: PathBuf,

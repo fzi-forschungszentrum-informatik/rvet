@@ -196,12 +196,14 @@ fn main() -> anyhow::Result<()> {
             res
         }),
         cli::Command::Prof {
-            dispatch,
+            filter,
+            src_id,
             trace,
             program,
             profile,
         } => std::thread::scope(|scope| {
-            let reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(dispatch);
+            let handler = reader::ThreadDispatch::new(args.format, filter, src_id);
+            let reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(handler);
             let output = profile.unwrap_or_else(|| todo!()).open()?;
             let program = program.builder(target)?;
 

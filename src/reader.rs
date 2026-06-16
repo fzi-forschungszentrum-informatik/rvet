@@ -10,6 +10,8 @@ use std::sync::mpsc;
 use anyhow::Context;
 use riscv_etrace::packet;
 
+use crate::cli;
+
 use packet::decoder::Decoder;
 use packet::unit::Plug;
 
@@ -144,6 +146,19 @@ pub enum SingleHart {
         /// Source to filter for
         src_id: u64,
     },
+}
+
+impl SingleHart {
+    /// Create a handler from configuration
+    pub fn new(format: cli::PacketFormat, selector: cli::CommonSelector, src_id: u64) -> Self {
+        match format {
+            cli::PacketFormat::Encap => Self::Encap {
+                src_id: src_id as u16,
+                flow: selector.flow(),
+            },
+            cli::PacketFormat::Smi => Self::Smi { src_id },
+        }
+    }
 }
 
 impl PacketHandler for SingleHart {

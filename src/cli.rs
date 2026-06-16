@@ -12,7 +12,7 @@ use riscv_etrace::packet::{encap, smi, unit};
 
 use crate::binary;
 use crate::csv;
-use crate::reader::{SingleHart, ThreadDispatch};
+use crate::reader::ThreadDispatch;
 use crate::util::Selector;
 
 #[derive(clap::Parser)]
@@ -94,7 +94,11 @@ pub enum Command {
     /// Trace a single source
     Trace {
         #[command(flatten)]
-        filter: SingleHart,
+        filter: CommonSelector,
+
+        /// Process packets originating from this source
+        #[arg(long, default_value_t, value_name("ID"))]
+        src_id: u64,
 
         /// Show playloads in between trace output
         #[arg(long, action = clap::ArgAction::SetTrue)]

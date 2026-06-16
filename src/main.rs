@@ -81,11 +81,13 @@ fn main() -> anyhow::Result<()> {
         }
         cli::Command::Trace {
             filter,
+            src_id,
             show_payloads,
             trace,
             program,
         } => {
-            let mut reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(filter);
+            let handler = reader::SingleHart::new(args.format, filter, src_id);
+            let mut reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(handler);
             let mut tracer = tracer
                 .with_binary(program.build(target)?)
                 .build::<riscv_etrace::types::stack::NoStack, _>()

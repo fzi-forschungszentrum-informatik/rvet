@@ -238,6 +238,19 @@ pub struct ThreadDispatch {
 }
 
 impl ThreadDispatch {
+    /// Create a handler from configuration
+    pub fn new(format: cli::PacketFormat, selector: cli::CommonSelector, src_id: Vec<u64>) -> Self {
+        let kind = match format {
+            cli::PacketFormat::Encap => TDKind::Encap(selector.flow()),
+            cli::PacketFormat::Smi => TDKind::Smi,
+        };
+        Self {
+            targets: Default::default(),
+            kind,
+            src_id,
+        }
+    }
+
     /// Retrieve the target to which dispatch payloads with the given source id
     fn dispatch(
         &mut self,

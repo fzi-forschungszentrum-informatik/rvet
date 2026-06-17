@@ -179,20 +179,18 @@ impl PacketHandler for SingleHart {
 #[derive(Clone, Debug)]
 pub struct ThreadDispatch {
     targets: HashMap<u64, mpsc::SyncSender<Payload>>,
-    kind: TDKind,
+    format: cli::PacketFormat,
+    selector: cli::CommonSelector,
     src_id: Vec<u64>,
 }
 
 impl ThreadDispatch {
     /// Create a handler from configuration
     pub fn new(format: cli::PacketFormat, selector: cli::CommonSelector, src_id: Vec<u64>) -> Self {
-        let kind = match format {
-            cli::PacketFormat::Encap => TDKind::Encap(selector.flow()),
-            cli::PacketFormat::Smi => TDKind::Smi,
-        };
         Self {
             targets: Default::default(),
-            kind,
+            format,
+            selector,
             src_id,
         }
     }
@@ -231,18 +229,18 @@ impl PacketHandler for ThreadDispatch {
     type Output = (u64, mpsc::Receiver<Payload>);
 
     fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
-        match self.kind {
-            TDKind::Encap(flow) => {
+        match self.format {
+            cli::PacketFormat::Encap => {
                 let packet = decoder.decode_encap_packet()?.into_normal();
-                let Some(packet) = packet.filter(|p| p.flow() == flow) else {
+                let Some(packet) = packet.filter(|p| self.selector.matches(p)) else {
                     return Ok(None);
                 };
                 let src_id = packet.src_id().into();
                 self.dispatch(src_id, packet)
             }
-            TDKind::Smi => {
+            cli::PacketFormat::Smi => {
                 let packet = decoder.decode_smi_packet()?;
-                if packet.trace_type().is_none() {
+                if !self.selector.matches(&packet) {
                     return Ok(None);
                 }
                 let src_id = packet.hart();

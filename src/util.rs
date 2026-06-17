@@ -73,3 +73,13 @@ impl<T> Selector<smi::Packet<T>> for Vec<u64> {
         self.is_empty() || self.contains(&packet.hart())
     }
 }
+
+/// A [`Selector`] accepting all packets
+#[derive(Copy, Clone, Default, Debug)]
+pub struct All;
+
+impl<P> Selector<P> for All {
+    fn matches(&self, _packet: &P) -> bool {
+        true
+    }
+}

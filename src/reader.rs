@@ -11,6 +11,7 @@ use anyhow::Context;
 use riscv_etrace::packet;
 
 use crate::cli;
+use crate::util::Selector;
 
 use packet::decoder::Decoder;
 use packet::unit::Plug;
@@ -133,30 +134,19 @@ impl<T: PacketHandler> PacketHandler for &mut T {
 
 /// A [`PacketHandler`] filtering for tracing payloads emitted by a single source
 #[derive(Copy, Clone, Debug)]
-pub enum SingleHart {
-    /// Decode RISC-V Encapsulation structures
-    Encap {
-        /// Source to filter for
-        src_id: u16,
-        /// Accepted flow indicator
-        flow: u8,
-    },
-    /// Decode Siemens Messaging Infrastructure (SMI) packets
-    Smi {
-        /// Source to filter for
-        src_id: u64,
-    },
+pub struct SingleHart {
+    format: cli::PacketFormat,
+    selector: cli::CommonSelector,
+    src_id: u64,
 }
 
 impl SingleHart {
     /// Create a handler from configuration
     pub fn new(format: cli::PacketFormat, selector: cli::CommonSelector, src_id: u64) -> Self {
-        match format {
-            cli::PacketFormat::Encap => Self::Encap {
-                src_id: src_id as u16,
-                flow: selector.flow(),
-            },
-            cli::PacketFormat::Smi => Self::Smi { src_id },
+        Self {
+            format,
+            selector,
+            src_id,
         }
     }
 }
@@ -165,16 +155,16 @@ impl PacketHandler for SingleHart {
     type Output = Payload;
 
     fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
-        let res = match *self {
-            Self::Encap { src_id, flow } => decoder
+        let res = match self.format {
+            cli::PacketFormat::Encap => decoder
                 .decode_encap_packet()?
                 .into_normal()
-                .filter(|p| p.src_id() == src_id && p.flow() == flow)
+                .filter(|p| self.selector.matches(p) && self.src_id.matches(p))
                 .map(|p| p.decode_payload())
                 .transpose(),
-            Self::Smi { src_id } => {
+            cli::PacketFormat::Smi => {
                 let packet = decoder.decode_smi_packet()?;
-                if packet.hart() == src_id && packet.trace_type().is_some() {
+                if self.selector.matches(&packet) && self.src_id.matches(&packet) {
                     packet.decode_payload().map(Some)
                 } else {
                     Ok(None)

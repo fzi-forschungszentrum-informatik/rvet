@@ -274,15 +274,6 @@ impl PacketHandler for ThreadDispatch {
     }
 }
 
-/// Kind of [`ThreadDispatch`]
-#[derive(Copy, Clone, Debug)]
-pub enum TDKind {
-    /// Decode RISC-V Encapsulation structures
-    Encap(u8),
-    /// Decode Siemens Messaging Infrastructure (SMI) packets
-    Smi,
-}
-
 /// A dummy [`PacketHandler`]
 #[derive(Copy, Clone, Default, Debug)]
 pub struct DefaultHandler;

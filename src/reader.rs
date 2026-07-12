@@ -166,19 +166,14 @@ impl<T: PacketHandler> PacketHandler for &mut T {
 /// A [`PacketHandler`] filtering for tracing payloads emitted by a single source
 #[derive(Copy, Clone, Debug)]
 pub struct SingleHart {
-    format: cli::PacketFormat,
     selector: cli::CommonSelector,
     src_id: u64,
 }
 
 impl SingleHart {
     /// Create a handler from configuration
-    pub fn new(format: cli::PacketFormat, selector: cli::CommonSelector, src_id: u64) -> Self {
-        Self {
-            format,
-            selector,
-            src_id,
-        }
+    pub fn new(selector: cli::CommonSelector, src_id: u64) -> Self {
+        Self { selector, src_id }
     }
 }
 

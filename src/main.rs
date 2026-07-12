@@ -74,7 +74,7 @@ fn main() -> anyhow::Result<()> {
             trace,
         } => {
             let mut out = stdout().lock();
-            let handler = reader::SingleHart::new(args.format, filter, src_id);
+            let handler = reader::SingleHart::new(filter, src_id);
             reader::Reader::new(trace.as_ref(), decoder, args.format)?
                 .with_handler(handler)
                 .try_for_each(|p| writeln!(out, "{}", p?).map_err(Into::into))
@@ -86,7 +86,7 @@ fn main() -> anyhow::Result<()> {
             trace,
             program,
         } => {
-            let handler = reader::SingleHart::new(args.format, filter, src_id);
+            let handler = reader::SingleHart::new(filter, src_id);
             let mut reader =
                 reader::Reader::new(trace.as_ref(), decoder, args.format)?.with_handler(handler);
             let mut tracer = tracer

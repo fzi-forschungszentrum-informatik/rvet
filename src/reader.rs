@@ -218,17 +218,15 @@ impl PacketHandler for SingleHart {
 #[derive(Clone, Debug)]
 pub struct ThreadDispatch {
     targets: HashMap<u64, mpsc::SyncSender<Payload>>,
-    format: cli::PacketFormat,
     selector: cli::CommonSelector,
     src_id: Vec<u64>,
 }
 
 impl ThreadDispatch {
     /// Create a handler from configuration
-    pub fn new(format: cli::PacketFormat, selector: cli::CommonSelector, src_id: Vec<u64>) -> Self {
+    pub fn new(selector: cli::CommonSelector, src_id: Vec<u64>) -> Self {
         Self {
             targets: Default::default(),
-            format,
             selector,
             src_id,
         }

@@ -156,7 +156,7 @@ fn main() -> anyhow::Result<()> {
             csv,
             fields,
         } => std::thread::scope(|scope| {
-            let handler = reader::ThreadDispatch::new(args.format, filter, src_id);
+            let handler = reader::ThreadDispatch::new(filter, src_id);
             let reader =
                 reader::Reader::new(trace.as_ref(), decoder, args.format)?.with_handler(handler);
             let make_write = csv
@@ -204,7 +204,7 @@ fn main() -> anyhow::Result<()> {
             program,
             profile,
         } => std::thread::scope(|scope| {
-            let handler = reader::ThreadDispatch::new(args.format, filter, src_id);
+            let handler = reader::ThreadDispatch::new(filter, src_id);
             let reader =
                 reader::Reader::new(trace.as_ref(), decoder, args.format)?.with_handler(handler);
             let output = profile.unwrap_or_else(|| todo!()).open()?;

@@ -23,6 +23,7 @@ use packet::unit::Plug;
 pub struct Reader<H: PacketHandler = DefaultHandler> {
     reader: BufReader<File>,
     builder: packet::Builder<Plug>,
+    format: cli::PacketFormat,
     handler: H,
 }
 
@@ -34,11 +35,13 @@ impl Reader {
     pub fn new(
         trace_file: &std::path::Path,
         builder: packet::Builder<Plug>,
+        format: cli::PacketFormat,
     ) -> anyhow::Result<Self> {
         File::open(trace_file)
             .map(|f| Self {
                 reader: BufReader::new(f),
                 builder,
+                format,
                 handler: Default::default(),
             })
             .with_context(|| format!("Could not open trace file {}", trace_file.display()))
@@ -51,15 +54,17 @@ impl<H: PacketHandler> Reader<H> {
         Reader {
             reader: self.reader,
             builder: self.builder,
+            format: self.format,
             handler,
         }
     }
 
     /// Read/process a single packet
     ///
-    /// Calls [`PacketHandler::handle`] with a new [`Decoder`]. If the result
-    /// indicates [insufficient data][packet::error::Error::InsufficientData],
-    /// the process is repeated with a larger buffer if possible.
+    /// Performs initial packet decode with a new [`Decoder`] and passes it to
+    /// the appropriate [`PacketHandler`] fn. If the packet decode errors due to
+    /// [insufficient data][packet::error::Error::InsufficientData], the process
+    /// is repeated with a larger buffer if possible.
     ///
     /// # Note
     ///
@@ -76,32 +81,32 @@ impl<H: PacketHandler> Reader<H> {
             }
 
             let mut decoder = self.builder.decoder(buf);
-            match self.handler.handle(&mut decoder) {
+            let res = match self.format {
+                cli::PacketFormat::Encap => decoder.decode().map(|p| self.handler.handle_encap(p)),
+                cli::PacketFormat::Smi => decoder.decode().map(|p| self.handler.handle_smi(p)),
+            };
+            match res {
                 Ok(r) => {
                     let read = buf.len() - decoder.bytes_left();
                     self.reader.consume(read);
-                    if let Some(res) = r {
-                        return Ok(Some(res));
+                    if !matches!(r, Ok(None)) {
+                        return r;
                     }
                 }
-                Err(e) => {
-                    if let Some(packet::error::Error::InsufficientData(need)) = e.downcast_ref() {
-                        // The buffer did not contain a full packet, so we try
-                        // to load at least the amount of data needed to carry
-                        // on.
-                        let need = buf.len().saturating_add(need.get());
+                Err(packet::error::Error::InsufficientData(need)) => {
+                    // The buffer did not contain a full packet, so we try to
+                    // load at least the amount of data needed to carry on.
+                    let need = buf.len().saturating_add(need.get());
 
-                        let buf = self
-                            .reader
-                            .peek(need)
-                            .context("Could not read from trace file")?;
-                        if buf.len() < need {
-                            anyhow::bail!("Reached end of file while decoding a packet");
-                        }
-                    } else {
-                        return Err(e);
+                    let buf = self
+                        .reader
+                        .peek(need)
+                        .context("Could not read from trace file")?;
+                    if buf.len() < need {
+                        anyhow::bail!("Reached end of file while decoding a packet");
                     }
                 }
+                Err(e) => return Err(anyhow::Error::new(e).context("Could not decode packet")),
             };
         }
     }

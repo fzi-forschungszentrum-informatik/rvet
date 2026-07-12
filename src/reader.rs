@@ -136,9 +136,6 @@ pub trait PacketHandler {
         &mut self,
         packet: smi::Packet<Decoder<'_, Plug>>,
     ) -> anyhow::Result<Option<Self::Output>>;
-
-    /// Decode and handle a single packet
-    fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>>;
 }
 
 impl<T: PacketHandler> PacketHandler for &mut T {
@@ -156,10 +153,6 @@ impl<T: PacketHandler> PacketHandler for &mut T {
         packet: smi::Packet<Decoder<'_, Plug>>,
     ) -> anyhow::Result<Option<Self::Output>> {
         T::handle_smi(self, packet)
-    }
-
-    fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
-        T::handle(self, decoder)
     }
 }
 
@@ -203,13 +196,6 @@ impl PacketHandler for SingleHart {
                 .context("Could not decode payload")
         } else {
             Ok(None)
-        }
-    }
-
-    fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
-        match self.format {
-            cli::PacketFormat::Encap => self.handle_encap(decoder.decode()?),
-            cli::PacketFormat::Smi => self.handle_smi(decoder.decode()?),
         }
     }
 }
@@ -286,13 +272,6 @@ impl PacketHandler for ThreadDispatch {
         let src_id = packet.hart();
         self.dispatch(src_id, packet)
     }
-
-    fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
-        match self.format {
-            cli::PacketFormat::Encap => self.handle_encap(decoder.decode()?),
-            cli::PacketFormat::Smi => self.handle_smi(decoder.decode()?),
-        }
-    }
 }
 
 /// Kind of [`ThreadDispatch`]
@@ -322,10 +301,6 @@ impl PacketHandler for DefaultHandler {
         &mut self,
         _packet: smi::Packet<Decoder<'_, Plug>>,
     ) -> anyhow::Result<Option<Self::Output>> {
-        Ok(None)
-    }
-
-    fn handle(&mut self, _decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
         Ok(None)
     }
 }

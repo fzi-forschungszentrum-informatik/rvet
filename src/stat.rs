@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 //! Utilities for gathering of "statistics"
 
-use anyhow::Context;
 use riscv_etrace::packet::{self, encap, smi};
 
 use crate::reader::PacketHandler;
@@ -72,16 +71,6 @@ impl PacketHandler for EncapHandler {
     ) -> anyhow::Result<Option<Self::Output>> {
         Err(anyhow::anyhow!("SMI stat handler cannot handle SMI packet"))
     }
-
-    fn handle(
-        &mut self,
-        decoder: &mut packet::decoder::Decoder<'_, packet::unit::Plug>,
-    ) -> anyhow::Result<Option<Self::Output>> {
-        decoder
-            .decode_encap_packet()
-            .context("Could not decode packet")
-            .map(|p| Some(p.into()))
-    }
 }
 
 /// Header fields of a SMI packet
@@ -123,15 +112,5 @@ impl PacketHandler for SmiHandler {
         packet: smi::Packet<Decoder<'_, Plug>>,
     ) -> anyhow::Result<Option<Self::Output>> {
         Ok(Some(packet.into()))
-    }
-
-    fn handle(
-        &mut self,
-        decoder: &mut packet::decoder::Decoder<'_, packet::unit::Plug>,
-    ) -> anyhow::Result<Option<Self::Output>> {
-        decoder
-            .decode_smi_packet()
-            .context("Could not decode packet")
-            .map(|p| Some(p.into()))
     }
 }

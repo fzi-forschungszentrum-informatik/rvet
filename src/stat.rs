@@ -7,6 +7,9 @@ use riscv_etrace::packet::{self, encap, smi};
 
 use crate::reader::PacketHandler;
 
+use packet::decoder::Decoder;
+use packet::unit::Plug;
+
 /// Header fields of a RISC-V encapsulation packet
 #[derive(Copy, Clone, Debug)]
 pub enum EncapHeader {
@@ -56,6 +59,20 @@ pub struct EncapHandler;
 impl PacketHandler for EncapHandler {
     type Output = EncapHeader;
 
+    fn handle_encap(
+        &mut self,
+        packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        Ok(Some(packet.into()))
+    }
+
+    fn handle_smi(
+        &mut self,
+        _packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        Err(anyhow::anyhow!("SMI stat handler cannot handle SMI packet"))
+    }
+
     fn handle(
         &mut self,
         decoder: &mut packet::decoder::Decoder<'_, packet::unit::Plug>,
@@ -91,6 +108,22 @@ pub struct SmiHandler;
 
 impl PacketHandler for SmiHandler {
     type Output = SmiHeader;
+
+    fn handle_encap(
+        &mut self,
+        _packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        Err(anyhow::anyhow!(
+            "SMI stat handler cannot handle encap packet"
+        ))
+    }
+
+    fn handle_smi(
+        &mut self,
+        packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        Ok(Some(packet.into()))
+    }
 
     fn handle(
         &mut self,

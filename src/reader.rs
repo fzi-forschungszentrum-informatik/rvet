@@ -8,7 +8,7 @@ use std::fs::File;
 use std::sync::mpsc;
 
 use anyhow::Context;
-use riscv_etrace::packet;
+use riscv_etrace::packet::{self, encap, smi};
 
 use crate::cli;
 use crate::util::Selector;
@@ -120,12 +120,38 @@ pub trait PacketHandler {
     /// Type of output resulting from processing a single packet
     type Output;
 
+    /// Handle an [`encap::Packet`]
+    fn handle_encap(
+        &mut self,
+        packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>>;
+
+    /// Handle an [`smi::Packet`]
+    fn handle_smi(
+        &mut self,
+        packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>>;
+
     /// Decode and handle a single packet
     fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>>;
 }
 
 impl<T: PacketHandler> PacketHandler for &mut T {
     type Output = T::Output;
+
+    fn handle_encap(
+        &mut self,
+        packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        T::handle_encap(self, packet)
+    }
+
+    fn handle_smi(
+        &mut self,
+        packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        T::handle_smi(self, packet)
+    }
 
     fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
         T::handle(self, decoder)
@@ -154,24 +180,37 @@ impl SingleHart {
 impl PacketHandler for SingleHart {
     type Output = Payload;
 
+    fn handle_encap(
+        &mut self,
+        packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        packet
+            .into_normal()
+            .filter(|p| self.selector.matches(p) && self.src_id.matches(p))
+            .map(|p| p.decode_payload())
+            .transpose()
+            .context("Could not decode payload")
+    }
+
+    fn handle_smi(
+        &mut self,
+        packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        if self.selector.matches(&packet) && self.src_id.matches(&packet) {
+            packet
+                .decode_payload()
+                .map(Some)
+                .context("Could not decode payload")
+        } else {
+            Ok(None)
+        }
+    }
+
     fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
-        let res = match self.format {
-            cli::PacketFormat::Encap => decoder
-                .decode_encap_packet()?
-                .into_normal()
-                .filter(|p| self.selector.matches(p) && self.src_id.matches(p))
-                .map(|p| p.decode_payload())
-                .transpose(),
-            cli::PacketFormat::Smi => {
-                let packet = decoder.decode_smi_packet()?;
-                if self.selector.matches(&packet) && self.src_id.matches(&packet) {
-                    packet.decode_payload().map(Some)
-                } else {
-                    Ok(None)
-                }
-            }
-        };
-        res.context("Could not decode payload")
+        match self.format {
+            cli::PacketFormat::Encap => self.handle_encap(decoder.decode()?),
+            cli::PacketFormat::Smi => self.handle_smi(decoder.decode()?),
+        }
     }
 }
 
@@ -228,24 +267,32 @@ impl ThreadDispatch {
 impl PacketHandler for ThreadDispatch {
     type Output = (u64, mpsc::Receiver<Payload>);
 
+    fn handle_encap(
+        &mut self,
+        packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        let Some(packet) = packet.into_normal().filter(|p| self.selector.matches(p)) else {
+            return Ok(None);
+        };
+        let src_id = packet.src_id().into();
+        self.dispatch(src_id, packet)
+    }
+
+    fn handle_smi(
+        &mut self,
+        packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        if !self.selector.matches(&packet) {
+            return Ok(None);
+        }
+        let src_id = packet.hart();
+        self.dispatch(src_id, packet)
+    }
+
     fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
         match self.format {
-            cli::PacketFormat::Encap => {
-                let packet = decoder.decode_encap_packet()?.into_normal();
-                let Some(packet) = packet.filter(|p| self.selector.matches(p)) else {
-                    return Ok(None);
-                };
-                let src_id = packet.src_id().into();
-                self.dispatch(src_id, packet)
-            }
-            cli::PacketFormat::Smi => {
-                let packet = decoder.decode_smi_packet()?;
-                if !self.selector.matches(&packet) {
-                    return Ok(None);
-                }
-                let src_id = packet.hart();
-                self.dispatch(src_id, packet)
-            }
+            cli::PacketFormat::Encap => self.handle_encap(decoder.decode()?),
+            cli::PacketFormat::Smi => self.handle_smi(decoder.decode()?),
         }
     }
 }
@@ -265,6 +312,20 @@ pub struct DefaultHandler;
 
 impl PacketHandler for DefaultHandler {
     type Output = ();
+
+    fn handle_encap(
+        &mut self,
+        _packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        Ok(None)
+    }
+
+    fn handle_smi(
+        &mut self,
+        _packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        Ok(None)
+    }
 
     fn handle(&mut self, _decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
         Ok(None)

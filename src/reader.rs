@@ -8,9 +8,10 @@ use std::fs::File;
 use std::sync::mpsc;
 
 use anyhow::Context;
-use riscv_etrace::packet;
+use riscv_etrace::packet::{self, encap, smi};
 
 use crate::cli;
+use crate::util::Selector;
 
 use packet::decoder::Decoder;
 use packet::unit::Plug;
@@ -22,6 +23,7 @@ use packet::unit::Plug;
 pub struct Reader<H: PacketHandler = DefaultHandler> {
     reader: BufReader<File>,
     builder: packet::Builder<Plug>,
+    format: cli::PacketFormat,
     handler: H,
 }
 
@@ -33,11 +35,13 @@ impl Reader {
     pub fn new(
         trace_file: &std::path::Path,
         builder: packet::Builder<Plug>,
+        format: cli::PacketFormat,
     ) -> anyhow::Result<Self> {
         File::open(trace_file)
             .map(|f| Self {
                 reader: BufReader::new(f),
                 builder,
+                format,
                 handler: Default::default(),
             })
             .with_context(|| format!("Could not open trace file {}", trace_file.display()))
@@ -50,15 +54,17 @@ impl<H: PacketHandler> Reader<H> {
         Reader {
             reader: self.reader,
             builder: self.builder,
+            format: self.format,
             handler,
         }
     }
 
     /// Read/process a single packet
     ///
-    /// Calls [`PacketHandler::handle`] with a new [`Decoder`]. If the result
-    /// indicates [insufficient data][packet::error::Error::InsufficientData],
-    /// the process is repeated with a larger buffer if possible.
+    /// Performs initial packet decode with a new [`Decoder`] and passes it to
+    /// the appropriate [`PacketHandler`] fn. If the packet decode errors due to
+    /// [insufficient data][packet::error::Error::InsufficientData], the process
+    /// is repeated with a larger buffer if possible.
     ///
     /// # Note
     ///
@@ -75,32 +81,32 @@ impl<H: PacketHandler> Reader<H> {
             }
 
             let mut decoder = self.builder.decoder(buf);
-            match self.handler.handle(&mut decoder) {
+            let res = match self.format {
+                cli::PacketFormat::Encap => decoder.decode().map(|p| self.handler.handle_encap(p)),
+                cli::PacketFormat::Smi => decoder.decode().map(|p| self.handler.handle_smi(p)),
+            };
+            match res {
                 Ok(r) => {
                     let read = buf.len() - decoder.bytes_left();
                     self.reader.consume(read);
-                    if let Some(res) = r {
-                        return Ok(Some(res));
+                    if !matches!(r, Ok(None)) {
+                        return r;
                     }
                 }
-                Err(e) => {
-                    if let Some(packet::error::Error::InsufficientData(need)) = e.downcast_ref() {
-                        // The buffer did not contain a full packet, so we try
-                        // to load at least the amount of data needed to carry
-                        // on.
-                        let need = buf.len().saturating_add(need.get());
+                Err(packet::error::Error::InsufficientData(need)) => {
+                    // The buffer did not contain a full packet, so we try to
+                    // load at least the amount of data needed to carry on.
+                    let need = buf.len().saturating_add(need.get());
 
-                        let buf = self
-                            .reader
-                            .peek(need)
-                            .context("Could not read from trace file")?;
-                        if buf.len() < need {
-                            anyhow::bail!("Reached end of file while decoding a packet");
-                        }
-                    } else {
-                        return Err(e);
+                    let buf = self
+                        .reader
+                        .peek(need)
+                        .context("Could not read from trace file")?;
+                    if buf.len() < need {
+                        anyhow::bail!("Reached end of file while decoding a packet");
                     }
                 }
+                Err(e) => return Err(anyhow::Error::new(e).context("Could not decode packet")),
             };
         }
     }
@@ -119,69 +125,78 @@ pub trait PacketHandler {
     /// Type of output resulting from processing a single packet
     type Output;
 
-    /// Decode and handle a single packet
-    fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>>;
+    /// Handle an [`encap::Packet`]
+    fn handle_encap(
+        &mut self,
+        packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>>;
+
+    /// Handle an [`smi::Packet`]
+    fn handle_smi(
+        &mut self,
+        packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>>;
 }
 
 impl<T: PacketHandler> PacketHandler for &mut T {
     type Output = T::Output;
 
-    fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
-        T::handle(self, decoder)
+    fn handle_encap(
+        &mut self,
+        packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        T::handle_encap(self, packet)
+    }
+
+    fn handle_smi(
+        &mut self,
+        packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        T::handle_smi(self, packet)
     }
 }
 
 /// A [`PacketHandler`] filtering for tracing payloads emitted by a single source
 #[derive(Copy, Clone, Debug)]
-pub enum SingleHart {
-    /// Decode RISC-V Encapsulation structures
-    Encap {
-        /// Source to filter for
-        src_id: u16,
-        /// Accepted flow indicator
-        flow: u8,
-    },
-    /// Decode Siemens Messaging Infrastructure (SMI) packets
-    Smi {
-        /// Source to filter for
-        src_id: u64,
-    },
+pub struct SingleHart {
+    selector: cli::CommonSelector,
+    src_id: u64,
 }
 
 impl SingleHart {
     /// Create a handler from configuration
-    pub fn new(format: cli::PacketFormat, selector: cli::CommonSelector, src_id: u64) -> Self {
-        match format {
-            cli::PacketFormat::Encap => Self::Encap {
-                src_id: src_id as u16,
-                flow: selector.flow(),
-            },
-            cli::PacketFormat::Smi => Self::Smi { src_id },
-        }
+    pub fn new(selector: cli::CommonSelector, src_id: u64) -> Self {
+        Self { selector, src_id }
     }
 }
 
 impl PacketHandler for SingleHart {
     type Output = Payload;
 
-    fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
-        let res = match *self {
-            Self::Encap { src_id, flow } => decoder
-                .decode_encap_packet()?
-                .into_normal()
-                .filter(|p| p.src_id() == src_id && p.flow() == flow)
-                .map(|p| p.decode_payload())
-                .transpose(),
-            Self::Smi { src_id } => {
-                let packet = decoder.decode_smi_packet()?;
-                if packet.hart() == src_id && packet.trace_type().is_some() {
-                    packet.decode_payload().map(Some)
-                } else {
-                    Ok(None)
-                }
-            }
-        };
-        res.context("Could not decode payload")
+    fn handle_encap(
+        &mut self,
+        packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        packet
+            .into_normal()
+            .filter(|p| self.selector.matches(p) && self.src_id.matches(p))
+            .map(|p| p.decode_payload())
+            .transpose()
+            .context("Could not decode payload")
+    }
+
+    fn handle_smi(
+        &mut self,
+        packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        if self.selector.matches(&packet) && self.src_id.matches(&packet) {
+            packet
+                .decode_payload()
+                .map(Some)
+                .context("Could not decode payload")
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -189,20 +204,16 @@ impl PacketHandler for SingleHart {
 #[derive(Clone, Debug)]
 pub struct ThreadDispatch {
     targets: HashMap<u64, mpsc::SyncSender<Payload>>,
-    kind: TDKind,
+    selector: cli::CommonSelector,
     src_id: Vec<u64>,
 }
 
 impl ThreadDispatch {
     /// Create a handler from configuration
-    pub fn new(format: cli::PacketFormat, selector: cli::CommonSelector, src_id: Vec<u64>) -> Self {
-        let kind = match format {
-            cli::PacketFormat::Encap => TDKind::Encap(selector.flow()),
-            cli::PacketFormat::Smi => TDKind::Smi,
-        };
+    pub fn new(selector: cli::CommonSelector, src_id: Vec<u64>) -> Self {
         Self {
             targets: Default::default(),
-            kind,
+            selector,
             src_id,
         }
     }
@@ -240,35 +251,27 @@ impl ThreadDispatch {
 impl PacketHandler for ThreadDispatch {
     type Output = (u64, mpsc::Receiver<Payload>);
 
-    fn handle(&mut self, decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
-        match self.kind {
-            TDKind::Encap(flow) => {
-                let packet = decoder.decode_encap_packet()?.into_normal();
-                let Some(packet) = packet.filter(|p| p.flow() == flow) else {
-                    return Ok(None);
-                };
-                let src_id = packet.src_id().into();
-                self.dispatch(src_id, packet)
-            }
-            TDKind::Smi => {
-                let packet = decoder.decode_smi_packet()?;
-                if packet.trace_type().is_none() {
-                    return Ok(None);
-                }
-                let src_id = packet.hart();
-                self.dispatch(src_id, packet)
-            }
-        }
+    fn handle_encap(
+        &mut self,
+        packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        let Some(packet) = packet.into_normal().filter(|p| self.selector.matches(p)) else {
+            return Ok(None);
+        };
+        let src_id = packet.src_id().into();
+        self.dispatch(src_id, packet)
     }
-}
 
-/// Kind of [`ThreadDispatch`]
-#[derive(Copy, Clone, Debug)]
-pub enum TDKind {
-    /// Decode RISC-V Encapsulation structures
-    Encap(u8),
-    /// Decode Siemens Messaging Infrastructure (SMI) packets
-    Smi,
+    fn handle_smi(
+        &mut self,
+        packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        if !self.selector.matches(&packet) {
+            return Ok(None);
+        }
+        let src_id = packet.hart();
+        self.dispatch(src_id, packet)
+    }
 }
 
 /// A dummy [`PacketHandler`]
@@ -278,7 +281,17 @@ pub struct DefaultHandler;
 impl PacketHandler for DefaultHandler {
     type Output = ();
 
-    fn handle(&mut self, _decoder: &mut Decoder<'_, Plug>) -> anyhow::Result<Option<Self::Output>> {
+    fn handle_encap(
+        &mut self,
+        _packet: encap::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
+        Ok(None)
+    }
+
+    fn handle_smi(
+        &mut self,
+        _packet: smi::Packet<Decoder<'_, Plug>>,
+    ) -> anyhow::Result<Option<Self::Output>> {
         Ok(None)
     }
 }

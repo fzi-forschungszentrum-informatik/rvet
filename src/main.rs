@@ -68,19 +68,26 @@ fn main() -> anyhow::Result<()> {
         .with_params(&params);
 
     let res = match args.command {
-        cli::Command::Payloads { filter, trace } => {
+        cli::Command::Payloads {
+            filter,
+            src_id,
+            trace,
+        } => {
             let mut out = stdout().lock();
+            let handler = reader::SingleHart::new(args.format, filter, src_id);
             reader::Reader::new(trace.as_ref(), decoder)?
-                .with_handler(filter)
+                .with_handler(handler)
                 .try_for_each(|p| writeln!(out, "{}", p?).map_err(Into::into))
         }
         cli::Command::Trace {
             filter,
+            src_id,
             show_payloads,
             trace,
             program,
         } => {
-            let mut reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(filter);
+            let handler = reader::SingleHart::new(args.format, filter, src_id);
+            let mut reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(handler);
             let mut tracer = tracer
                 .with_binary(program.build(target)?)
                 .build::<riscv_etrace::types::stack::NoStack, _>()
@@ -141,13 +148,15 @@ fn main() -> anyhow::Result<()> {
             })
         }
         cli::Command::Csv {
-            dispatch,
+            filter,
+            src_id,
             trace,
             program,
             csv,
             fields,
         } => std::thread::scope(|scope| {
-            let reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(dispatch);
+            let handler = reader::ThreadDispatch::new(args.format, filter, src_id);
+            let reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(handler);
             let make_write = csv
                 .map(cli::Output::open)
                 .transpose()?
@@ -187,12 +196,14 @@ fn main() -> anyhow::Result<()> {
             res
         }),
         cli::Command::Prof {
-            dispatch,
+            filter,
+            src_id,
             trace,
             program,
             profile,
         } => std::thread::scope(|scope| {
-            let reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(dispatch);
+            let handler = reader::ThreadDispatch::new(args.format, filter, src_id);
+            let reader = reader::Reader::new(trace.as_ref(), decoder)?.with_handler(handler);
             let output = profile.unwrap_or_else(|| todo!()).open()?;
             let program = program.builder(target)?;
 

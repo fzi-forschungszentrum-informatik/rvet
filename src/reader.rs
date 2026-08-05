@@ -10,6 +10,8 @@ use std::sync::mpsc;
 use anyhow::Context;
 use riscv_etrace::packet;
 
+use crate::cli;
+
 use packet::decoder::Decoder;
 use packet::unit::Plug;
 
@@ -146,6 +148,19 @@ pub enum SingleHart {
     },
 }
 
+impl SingleHart {
+    /// Create a handler from configuration
+    pub fn new(format: cli::PacketFormat, selector: cli::CommonSelector, src_id: u64) -> Self {
+        match format {
+            cli::PacketFormat::Encap => Self::Encap {
+                src_id: src_id as u16,
+                flow: selector.flow(),
+            },
+            cli::PacketFormat::Smi => Self::Smi { src_id },
+        }
+    }
+}
+
 impl PacketHandler for SingleHart {
     type Output = Payload;
 
@@ -170,59 +185,28 @@ impl PacketHandler for SingleHart {
     }
 }
 
-impl clap::Args for SingleHart {
-    fn augment_args(cmd: clap::Command) -> clap::Command {
-        Self::augment_args_for_update(cmd)
-    }
-
-    fn augment_args_for_update(cmd: clap::Command) -> clap::Command {
-        cmd.arg(clap::arg!(--"src-id" <ID> "Process packets originating from this source"))
-            .arg(clap::arg!(--"flow" <ID> "Process packets with this flow indicator"))
-    }
-}
-
-impl clap::FromArgMatches for SingleHart {
-    fn from_arg_matches(matches: &clap::ArgMatches) -> Result<Self, clap::Error> {
-        use crate::cli::PacketFormat;
-
-        let format = matches.get_one("format").cloned().unwrap_or_default();
-        let mut res = match format {
-            PacketFormat::Encap => Self::Encap { src_id: 0, flow: 0 },
-            PacketFormat::Smi => Self::Smi { src_id: 0 },
-        };
-        res.update_from_arg_matches(matches)?;
-        Ok(res)
-    }
-
-    fn update_from_arg_matches(&mut self, matches: &clap::ArgMatches) -> Result<(), clap::Error> {
-        let src_id_value = matches.get_one("src-id").cloned().unwrap_or_default();
-        match self {
-            Self::Encap { src_id, flow } => {
-                *src_id = src_id_value;
-                if let Some(f) = matches.get_one("flow") {
-                    *flow = *f;
-                }
-            }
-            Self::Smi { src_id } => *src_id = src_id_value.into(),
-        }
-        Ok(())
-    }
-}
-
 /// A [`PacketHandler`] dispatching to a separate threads for each source id
-#[derive(Clone, Debug, clap::Args)]
+#[derive(Clone, Debug)]
 pub struct ThreadDispatch {
-    #[arg(skip)]
     targets: HashMap<u64, mpsc::SyncSender<Payload>>,
-    #[command(flatten)]
     kind: TDKind,
-
-    /// Restrict processing to payloads from these sources
-    #[arg(long)]
     src_id: Vec<u64>,
 }
 
 impl ThreadDispatch {
+    /// Create a handler from configuration
+    pub fn new(format: cli::PacketFormat, selector: cli::CommonSelector, src_id: Vec<u64>) -> Self {
+        let kind = match format {
+            cli::PacketFormat::Encap => TDKind::Encap(selector.flow()),
+            cli::PacketFormat::Smi => TDKind::Smi,
+        };
+        Self {
+            targets: Default::default(),
+            kind,
+            src_id,
+        }
+    }
+
     /// Retrieve the target to which dispatch payloads with the given source id
     fn dispatch(
         &mut self,
@@ -285,39 +269,6 @@ pub enum TDKind {
     Encap(u8),
     /// Decode Siemens Messaging Infrastructure (SMI) packets
     Smi,
-}
-
-impl clap::Args for TDKind {
-    fn augment_args(cmd: clap::Command) -> clap::Command {
-        Self::augment_args_for_update(cmd)
-    }
-
-    fn augment_args_for_update(cmd: clap::Command) -> clap::Command {
-        cmd.arg(clap::arg!(--"flow" <ID> "Process packets with this flow indicator"))
-    }
-}
-
-impl clap::FromArgMatches for TDKind {
-    fn from_arg_matches(matches: &clap::ArgMatches) -> Result<Self, clap::Error> {
-        use crate::cli::PacketFormat;
-
-        let format = matches.get_one("format").cloned().unwrap_or_default();
-        let mut res = match format {
-            PacketFormat::Encap => Self::Encap(0),
-            PacketFormat::Smi => Self::Smi,
-        };
-        res.update_from_arg_matches(matches)?;
-        Ok(res)
-    }
-
-    fn update_from_arg_matches(&mut self, matches: &clap::ArgMatches) -> Result<(), clap::Error> {
-        if let Self::Encap(flow) = self
-            && let Some(f) = matches.get_one("flow")
-        {
-            *flow = *f;
-        }
-        Ok(())
-    }
 }
 
 /// A dummy [`PacketHandler`]
